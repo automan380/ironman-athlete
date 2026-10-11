@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="it">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -9,16 +9,17 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link rel="stylesheet" href="styles.css">
-  <title>Allenamenti</title>
+  <title>Training</title>
 </head>
 <body>
   <header id="topbar" hidden>
-    <button id="back" class="iconbtn" hidden aria-label="Indietro">‹</button>
-    <div class="brand">Allenamenti</div>
+    <button id="back" class="iconbtn" hidden aria-label="Back">‹</button>
+    <div class="brand" id="brand">Training</div>
     <div class="spacer"></div>
-    <span id="sync" class="sync" title="Stato sincronizzazione"></span>
-    <button id="signout" class="iconbtn" aria-label="Esci">Esci</button>
+    <span id="sync" class="sync"></span>
+    <button id="gear" class="iconbtn" aria-label="Settings">⚙</button>
   </header>
+  <div id="settingspanel" class="settingspanel" hidden></div>
   <main id="app" aria-live="polite"></main>
 
   <script src="vendor/supabase.js"></script>

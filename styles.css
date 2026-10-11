@@ -116,3 +116,16 @@ table.fuel td { padding: .25rem 0; }
              border-radius: 10px; padding: .6rem .75rem; font-size: .9rem; }
 .loggedbox table { width: 100%; border-collapse: collapse; }
 .loggedbox th { text-align: left; color: var(--muted); font-weight: 600; width: 7rem; padding: .15rem .4rem .15rem 0; }
+
+/* Settings panel (the gear) */
+.settingspanel { position: fixed; z-index: 20; right: 12px;
+                 top: calc(env(safe-area-inset-top, 0px) + 48px);
+                 background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+                 padding: .85rem; min-width: 15rem; display: flex; flex-direction: column; gap: .85rem;
+                 box-shadow: 0 10px 34px rgba(0,0,0,.28); }
+.setgroup { display: flex; flex-direction: column; gap: .4rem; }
+.setlabel { font-size: .72rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.segmented { display: flex; gap: .3rem; }
+.segmented button { flex: 1; font: inherit; font-size: .85rem; padding: .45rem .4rem; cursor: pointer;
+                    border: 1px solid var(--line); background: var(--surface2); color: var(--fg); border-radius: 8px; }
+.segmented button.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-weight: 700; }
