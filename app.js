@@ -6,7 +6,7 @@
 (function () {
   "use strict";
 
-  const APP_VERSION = "1.2.0";          // shown in the settings menu; keep in step with CHANGELOG.md
+  const APP_VERSION = "1.3.0";          // shown in the settings menu; keep in step with CHANGELOG.md
   const CFG = window.IRONMAN_CONFIG || {};
   const SB = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {
     auth: { persistSession: true, detectSessionInUrl: true, autoRefreshToken: true },
@@ -25,6 +25,8 @@
       error: "Error: ",
       no_plan: "No plan available yet.",
       no_plan_sub: "If your coach just published, try again shortly (the first load needs a connection).",
+      not_conn_title: "Not connected yet",
+      not_conn_sub: "You're signed in as {email}, but this email isn't connected to an athlete yet. Ask your coach to connect it, then reopen the app.",
       week_n: "Week {n}", today: "Today", recovery: "recovery", rest: "Rest",
       test_prefix: "Test: ", badge_test: "test", badge_key: "key",
       target: "Target", no_numeric: "No numeric target", use_talk: "Use the talk test:", talk: "talk test:",
@@ -55,6 +57,8 @@
       error: "Errore: ",
       no_plan: "Nessun piano ancora disponibile.",
       no_plan_sub: "Se il coach ha appena pubblicato, riprova tra poco (serve la rete la prima volta).",
+      not_conn_title: "Non ancora collegato",
+      not_conn_sub: "Hai effettuato l'accesso come {email}, ma questa email non è ancora collegata a un atleta. Chiedi al coach di collegarla, poi riapri l'app.",
       week_n: "Settimana {n}", today: "Oggi", recovery: "recupero", rest: "Riposo",
       test_prefix: "Test: ", badge_test: "test", badge_key: "chiave",
       target: "Target", no_numeric: "Nessun target numerico", use_talk: "Usa il talk test:", talk: "talk test:",
@@ -141,6 +145,13 @@
   async function idbPut(name, val) { const o = await store(name, "readwrite"); return new Promise((res) => { o.put(val); o.transaction.oncomplete = () => res(); o.transaction.onerror = () => res(); }); }
   async function idbAll(name) { const o = await store(name); return new Promise((res) => { const q = o.getAll(); q.onsuccess = () => res(q.result || []); q.onerror = () => res([]); }); }
   async function idbDel(name, key) { const o = await store(name, "readwrite"); return new Promise((res) => { o.delete(key); o.transaction.oncomplete = () => res(); o.transaction.onerror = () => res(); }); }
+  async function idbClear(name) { const o = await store(name, "readwrite"); return new Promise((res) => { o.clear(); o.transaction.oncomplete = () => res(); o.transaction.onerror = () => res(); }); }
+
+  async function doSignOut() {
+    try { await idbClear("cache"); await idbClear("outbox"); } catch (e) { /* ignore */ }
+    try { await SB.auth.signOut(); } catch (e) { /* ignore */ }
+    location.reload();
+  }
 
   function deviceId() {
     let id = null;
@@ -195,7 +206,7 @@
         if (set === "theme") applyTheme(); else { applyLang(); repaint(); }
         renderSettings();
       })));
-    $("#panelsignout").addEventListener("click", async () => { await SB.auth.signOut(); location.reload(); });
+    $("#panelsignout").addEventListener("click", doSignOut);
   }
 
   // ================= auth / boot =================
@@ -232,6 +243,10 @@
     if (!data || !data.session) { showLogin(); return; }
     topbar.hidden = false;
     if (!S.athleteId) await loadAthlete();
+    if (!S.athleteId && navigator.onLine) {   // signed in, but this email is linked to no athlete
+      renderNotConnected(data.session.user && data.session.user.email);
+      return;
+    }
     if (!S.weeks.length) await loadCache();
     if (S.weekIdx == null) S.weekIdx = currentWeekIdx();
     renderWeek();
@@ -246,12 +261,16 @@
 
   // ================= data =================
   async function loadAthlete() {
-    const cached = await idbGet("cache", "athlete");
-    if (cached) { S.athleteId = cached.athlete_id; S.displayName = cached.display_name || ""; }
+    // Online, trust the server: who this email belongs to now. Clear a stale cached athlete so a
+    // different person signing in on the same device never inherits the previous one's id.
     if (navigator.onLine) {
       const { data } = await SB.from("athlete_account").select("athlete_id, display_name").maybeSingle();
       if (data) { S.athleteId = data.athlete_id; S.displayName = data.display_name || ""; await idbSet("cache", "athlete", data); }
+      else { S.athleteId = null; S.displayName = ""; await idbDel("cache", "athlete"); }
+      return;
     }
+    const cached = await idbGet("cache", "athlete");
+    if (cached) { S.athleteId = cached.athlete_id; S.displayName = cached.display_name || ""; }
   }
   async function loadCache() {
     const p = await idbGet("cache", "plan");
@@ -323,6 +342,16 @@
         msg.hidden = false; msg.className = "msg err"; msg.textContent = T("error") + (e.message || e);
       } finally { this.disabled = false; this.textContent = t; }
     });
+  }
+
+  function renderNotConnected(email) {
+    S.view = "week"; S.current = null; $("#back").hidden = true;
+    app.innerHTML = `<div class="card" style="margin-top:2rem">
+      <h1>${T("not_conn_title")}</h1>
+      <p class="muted">${T("not_conn_sub", { email: esc(email || "") })}</p>
+      <button id="nc_out" class="ghost">${T("signout")}</button>
+    </div>`;
+    const b = $("#nc_out"); if (b) b.addEventListener("click", doSignOut);
   }
 
   // ================= week view =================
