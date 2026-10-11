@@ -6,6 +6,7 @@
 (function () {
   "use strict";
 
+  const APP_VERSION = "1.2.0";          // shown in the settings menu; keep in step with CHANGELOG.md
   const CFG = window.IRONMAN_CONFIG || {};
   const SB = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {
     auth: { persistSession: true, detectSessionInUrl: true, autoRefreshToken: true },
@@ -172,7 +173,8 @@
   function applyLang() {
     document.documentElement.lang = S.lang;
     document.title = T("brand");
-    const b = $("#brand"); if (b) b.textContent = T("brand");
+    const b = $("#brand"); if (b) b.setAttribute("aria-label", T("brand"));
+    const w = $(".wordmark"); if (w) w.textContent = T("brand");
     const g = $("#gear"); if (g) g.setAttribute("aria-label", T("settings"));
     const bk = $("#back"); if (bk) bk.setAttribute("aria-label", T("back"));
     setSync();
@@ -184,7 +186,8 @@
     p.innerHTML =
       `<div class="setgroup"><div class="setlabel">${T("theme")}</div>${seg("theme", [["auto", T("theme_auto")], ["light", T("theme_light")], ["dark", T("theme_dark")]])}</div>` +
       `<div class="setgroup"><div class="setlabel">${T("language")}</div>${seg("lang", [["en", "English"], ["it", "Italiano"]])}</div>` +
-      `<button id="panelsignout" class="ghost">${T("signout")}</button>`;
+      `<button id="panelsignout" class="ghost">${T("signout")}</button>` +
+      `<div class="setversion">v${APP_VERSION}</div>`;
     p.querySelectorAll(".segmented").forEach((sg) => sg.querySelectorAll("button").forEach((b) =>
       b.addEventListener("click", () => {
         const set = sg.getAttribute("data-set"), v = b.getAttribute("data-v");
