@@ -3,6 +3,18 @@
 All notable changes to the athlete app. The version here matches `APP_VERSION` in `app.js`
 (shown in the in-app settings menu). Dates are YYYY-MM-DD.
 
+## 2.4.0 — 2026-10-12
+- **Enter your test results in the app.** Open a test your coach scheduled and you now get a form with
+  the right boxes for that test — a swim CSS asks for your 400 m and 200 m times, a bike time trial
+  asks for heart rate / distance / power, a run race asks for the distance and time. You enter the
+  raw numbers; the app works nothing out.
+- **Your coach approves it before anything changes.** What you send is held for the coach to review —
+  your zones and plan update once they approve it (you'll get a "zones updated" notice). You can
+  correct a result and send it again until then.
+- A lightweight "last seen" ping lets your coach see you're using the app. It only records that you
+  opened it — nothing you typed.
+- Service-worker cache bumped to `v11`.
+
 ## 2.3.2 — 2026-10-12
 - **"Update available" notification now arrives on time.** When a new version of the app has finished
   downloading in the background, the bell lights with **"A new version of the app is ready — tap to

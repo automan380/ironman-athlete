@@ -6,7 +6,7 @@
 (function () {
   "use strict";
 
-  const APP_VERSION = "2.3.2";          // shown in the settings menu; keep in step with CHANGELOG.md
+  const APP_VERSION = "2.4.0";          // shown in the settings menu; keep in step with CHANGELOG.md
   let pendingReload = false;            // set when the athlete taps "update"; drives the one reload below
   const CFG = window.IRONMAN_CONFIG || {};
   // "Remember me on this device": when on, the session lives in localStorage and survives app
@@ -80,6 +80,14 @@
       multi: "Above 60 g/h you need a glucose + fructose mix: a single sugar cannot be absorbed fast enough.",
       warm_up: "Warm-up", how: "How to do it", measures: "What it measures",
       test_coach: "Record the test result with your coach.",
+      test_enter: "Enter your result", test_submit: "Send to coach", test_update: "Update result",
+      test_submitting: "Sending…",
+      test_sent: "Sent. Your coach will review and approve it — your zones update once they do.",
+      test_pending: "Already sent, waiting for your coach. You can correct it and send again.",
+      test_offline: "You're offline — connect to send your result.",
+      test_bad_time: "Enter a time as mm:ss, e.g. 19:20.",
+      test_need: "Fill in {field}.", test_conditions: "Conditions (optional)",
+      test_indoor: "Done indoors / on a trainer", mmss: "mm:ss",
       log_edit: "Edit log", log_new: "Log the session", done_on: "Done on", planned: " (planned)",
       required: "·required", save_done: "Save as done", save: "Save", mark_skip: "Mark skipped",
       logged: "Logged", skipped: "Skipped", queued: "queued", done_on_s: "done {day}",
@@ -142,6 +150,14 @@
       multi: "Sopra i 60 g/h serve un mix glucosio + fruttosio: uno zucchero solo non si assorbe abbastanza in fretta.",
       warm_up: "Riscaldamento", how: "Come si fa", measures: "Cosa misura",
       test_coach: "Registra il risultato del test con il coach.",
+      test_enter: "Inserisci il risultato", test_submit: "Invia al coach", test_update: "Aggiorna il risultato",
+      test_submitting: "Invio…",
+      test_sent: "Inviato. Il coach lo esaminerà e approverà — le zone si aggiornano quando lo fa.",
+      test_pending: "Già inviato, in attesa del coach. Puoi correggerlo e inviarlo di nuovo.",
+      test_offline: "Sei offline — collegati per inviare il risultato.",
+      test_bad_time: "Inserisci un tempo come mm:ss, es. 19:20.",
+      test_need: "Compila: {field}.", test_conditions: "Condizioni (facoltativo)",
+      test_indoor: "Fatto al chiuso / sui rulli", mmss: "mm:ss",
       log_edit: "Modifica il log", log_new: "Registra la sessione", done_on: "Fatto il giorno", planned: " (previsto)",
       required: "·richiesto", save_done: "Salva come fatto", save: "Salva", mark_skip: "Segna saltato",
       logged: "Registrato", skipped: "Saltato", queued: "in coda", done_on_s: "fatto {day}",
@@ -244,7 +260,7 @@
     logs: {}, outbox: {},
     fieldSpec: {}, weekIdx: null, section: "plan", view: "week", current: null,
     questionSpec: null, intakeResponse: null, intakeDraft: {}, intakeStep: "form", navChosen: false,
-    messages: [], appNotice: null, swWaiting: null,
+    messages: [], appNotice: null, swWaiting: null, submissions: {},
   };
   const lkey = (s) => `${s.on_date}|${s.session_key}`;
 
@@ -574,11 +590,19 @@
   }
   async function pollMessages() {
     if (!navigator.onLine || !S.athleteId) return;
+    touchLastSeen();
     try {
       const { data } = await SB.from("message").select("id,kind,body,created_at,read_at")
         .eq("direction", "out").order("created_at", { ascending: false });
       if (data) { S.messages = data; setBell(); }
     } catch (e) { /* ignore */ }
+  }
+  // A light heartbeat so the coach's roster can show a live presence dot. Fire-and-forget: it stamps
+  // only last_seen (a SECURITY DEFINER function), never anything the athlete types, and a failure is
+  // silent. Gated on being online and signed in, like every other write.
+  function touchLastSeen() {
+    if (!navigator.onLine || !S.athleteId) return;
+    try { SB.rpc("touch_last_seen").then(() => {}, () => {}); } catch (e) { /* ignore */ }
   }
   async function markMessagesRead() {
     if (S.appNotice) S.appNotice.unread = false;
@@ -722,6 +746,7 @@
     gateSection();
     renderSection();
     if (navigator.onLine) {
+      touchLastSeen();                                    // stamp presence on open, don't wait for the poll
       try { await refresh(); if (S.weekIdx == null) S.weekIdx = currentWeekIdx(); gateSection(); renderSection(); } catch (e) { console.warn("refresh failed", e); }
       flushOutbox().then(repaint);
     }
@@ -765,10 +790,11 @@
     S.zones = p.zones || {};
     S.questionSpec = p.questionSpec || S.questionSpec || null;
     S.intakeResponse = ("intake" in p) ? p.intake : S.intakeResponse;
+    S.submissions = p.submissions || {};
     S.fieldSpec = {}; ((S.meta && S.meta.field_spec) || []).forEach((f) => { S.fieldSpec[f.name] = f; });
   }
   async function refresh() {
-    const [meta, weeks, sessions, tests, zones, logs, qspec, intake, messages] = await Promise.all([
+    const [meta, weeks, sessions, tests, zones, logs, qspec, intake, messages, subs] = await Promise.all([
       SB.from("plan_meta").select("*").maybeSingle(),
       SB.from("plan_week").select("*").order("monday"),
       SB.from("plan_session").select("*").order("on_date"),
@@ -778,11 +804,13 @@
       SB.from("question_spec").select("spec").maybeSingle(),
       SB.from("intake_response").select("payload").maybeSingle(),
       SB.from("message").select("id,kind,body,created_at,read_at").eq("direction", "out").order("created_at", { ascending: false }),
+      SB.from("test_submission").select("protocol,on_date,fields,conditions,indoor,ingested_at"),
     ]);
     const zmap = {}; (zones.data || []).forEach((z) => { zmap[z.key] = z; });
+    const smap = {}; (subs.data || []).forEach((r) => { smap[`${r.protocol}|${r.on_date}`] = r; });
     const p = { meta: meta.data, weeks: weeks.data || [], sessions: sessions.data || [], tests: tests.data || [],
                 zones: zmap, questionSpec: (qspec.data && qspec.data.spec) || null,
-                intake: (intake.data && intake.data.payload) || null };
+                intake: (intake.data && intake.data.payload) || null, submissions: smap };
     S.messages = messages.data || [];
     applyPlan(p);
     S.logs = {}; (logs.data || []).forEach((r) => { S.logs[`${r.on_date}|${r.session_key}`] = r; });
@@ -1021,6 +1049,36 @@
     scrollTop();
     wireLogForm(s);
   }
+  // One input for a test's declared field, driven by the spec the coach published (single source of
+  // truth: the webapp's testing.PROTOCOLS). `prev` prefills a result already submitted but not yet
+  // approved, so the athlete can correct it.
+  function testFieldHtml(f, prev) {
+    const val = (prev && prev[f.name] != null) ? prev[f.name] : "";
+    const req = f.required ? ` <span class="req">${T("required")}</span>` : "";
+    const help = f.help ? `<div class="help">${esc(f.help)}</div>` : "";
+    const lab = `<label for="tf_${esc(f.name)}">${esc(f.label)}${req}</label>`;
+    let control;
+    if (f.kind === "time") {
+      control = `<input id="tf_${esc(f.name)}" name="${esc(f.name)}" type="text" inputmode="numeric"
+                 placeholder="${esc(f.placeholder || T("mmss"))}" value="${esc(val)}">`;
+    } else if (f.unit_kind) {
+      const swim = f.unit_kind === "short";
+      const opts = (swim ? [["m", "m"], ["yd", "yd"]] : [["km", "km"], ["mi", "mi"]]);
+      const defU = (S.meta && S.meta.units) === "imperial" ? (swim ? "yd" : "mi") : (swim ? "m" : "km");
+      const curU = (prev && prev[f.name + "_unit"]) || defU;
+      const sel = opts.map(([v, l]) => `<option value="${v}" ${v === curU ? "selected" : ""}>${l}</option>`).join("");
+      control = `<div class="row2"><input id="tf_${esc(f.name)}" name="${esc(f.name)}" type="number"
+                 inputmode="decimal" step="any" min="0" value="${esc(val)}">
+                 <select class="unit" name="${esc(f.name)}_unit" aria-label="unit">${sel}</select></div>`;
+    } else {
+      const u = f.kind === "hr" ? "bpm" : (f.kind === "power" ? "W" : "");
+      const input = `<input id="tf_${esc(f.name)}" name="${esc(f.name)}" type="number" inputmode="numeric"
+                     step="1" min="0" value="${esc(val)}">`;
+      control = u ? `<div class="row2">${input}<span class="unitlabel">${u}</span></div>` : input;
+    }
+    return `<div class="field">${lab}${control}${help}</div>`;
+  }
+
   function renderTest(ts) {
     S.view = "session"; S.current = null; $("#back").hidden = false;
     let html = `<div class="detail">
@@ -1032,9 +1090,68 @@
     if (ts.instructions && ts.instructions.length) html += `<div class="sectiontitle">${T("how")}</div><ul class="lines">${ts.instructions.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>`;
     if (ts.yields) html += `<div class="sectiontitle">${T("measures")}</div><p>${esc(ts.yields)}</p>`;
     if (ts.provenance) html += `<p class="note">${esc(ts.provenance)}</p>`;
-    html += `<p class="note">${T("test_coach")}</p></div>`;
+
+    const fields = Array.isArray(ts.fields) ? ts.fields : null;
+    if (fields && fields.length) {
+      const sub = S.submissions[`${ts.protocol}|${ts.on_date}`];
+      const prev = sub && sub.fields;
+      html += `<div class="sectiontitle">${T("test_enter")}</div>`;
+      if (sub) html += `<p class="note">${T("test_pending")}</p>`;
+      html += `<form id="testform">`;
+      fields.forEach((f) => { html += testFieldHtml(f, prev); });
+      html += `<div class="field"><label for="tf_conditions">${T("test_conditions")}</label>
+               <input id="tf_conditions" name="conditions" type="text" value="${esc((sub && sub.conditions) || "")}"></div>`;
+      html += `<label class="check"><input type="checkbox" id="tf_indoor" ${sub && sub.indoor ? "checked" : ""}> ${T("test_indoor")}</label>`;
+      html += `<div class="actions"><button type="button" id="testsend" class="primary">${sub ? T("test_update") : T("test_submit")}</button></div>`;
+      html += `<div id="testmsg" class="msg" hidden></div></form>`;
+    } else {
+      html += `<p class="note">${T("test_coach")}</p>`;
+    }
+    html += `</div>`;
     app.innerHTML = html;
+    const btn = $("#testsend");
+    if (btn) btn.addEventListener("click", () => submitTest(ts));
     scrollTop();
+  }
+
+  async function submitTest(ts) {
+    const form = $("#testform"), m = $("#testmsg");
+    const fields = {};
+    for (const f of ts.fields) {
+      const inp = form.elements[f.name];
+      const v = (inp && inp.value || "").trim();
+      if (v === "") {
+        if (f.required) { m.hidden = false; m.className = "msg err"; m.textContent = T("test_need", { field: f.label }); return; }
+        continue;
+      }
+      if (f.kind === "time" && !/^\d{1,2}(:\d{1,2}){1,2}$/.test(v)) {
+        m.hidden = false; m.className = "msg err"; m.textContent = T("test_bad_time"); return;
+      }
+      fields[f.name] = v;
+      if (f.unit_kind) { const u = form.elements[f.name + "_unit"]; if (u) fields[f.name + "_unit"] = u.value; }
+    }
+    const conditions = (form.elements["conditions"] && form.elements["conditions"].value || "").trim();
+    const indoor = !!($("#tf_indoor") && $("#tf_indoor").checked);
+    if (!navigator.onLine || !S.athleteId) {
+      m.hidden = false; m.className = "msg err"; m.textContent = T("test_offline"); return;
+    }
+    const btn = $("#testsend"); btn.disabled = true; const t = btn.textContent; btn.textContent = T("test_submitting");
+    const row = {
+      athlete_id: S.athleteId, protocol: ts.protocol, on_date: ts.on_date,
+      fields, conditions, indoor, device_id: deviceId(),
+      client_updated_at: new Date().toISOString(),
+      ingested_at: null,            // (re)submitting makes the coach pull it again
+    };
+    try {
+      const { error } = await SB.from("test_submission").upsert(row, { onConflict: "athlete_id,protocol,on_date" });
+      if (error) throw error;
+      S.submissions[`${ts.protocol}|${ts.on_date}`] = { protocol: ts.protocol, on_date: ts.on_date, fields, ingested_at: null };
+      m.hidden = false; m.className = "msg info"; m.textContent = T("test_sent");
+      btn.textContent = T("test_update");
+    } catch (e) {
+      m.hidden = false; m.className = "msg err"; m.textContent = T("error") + ((e && e.message) || e);
+      btn.textContent = t;
+    } finally { btn.disabled = false; }
   }
 
   // ================= logging =================
