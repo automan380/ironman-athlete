@@ -2,7 +2,7 @@
 // Supabase library) and serves same-origin requests cache-first. It deliberately does NOT touch
 // Supabase API calls (a different origin) — those go straight to the network, and when there is no
 // network the app falls back to the plan it cached in IndexedDB. Writes (POST/PATCH) are never cached.
-const CACHE = "ironman-athlete-v9";
+const CACHE = "ironman-athlete-v10";
 const SHELL = [
   "./", "./index.html", "./styles.css", "./app.js", "./config.js",
   "./vendor/supabase.js", "./manifest.webmanifest",
@@ -11,8 +11,14 @@ const SHELL = [
 ];
 
 self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  // No skipWaiting here: the new worker WAITS until the app tells it to take over (the athlete taps
+  // "update"), so a running app is never swapped out mid-use. See the "message" handler below.
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)));
 });
+
+// The app posts this when the athlete taps "update": activate now, then activate's clients.claim()
+// fires a controllerchange and the app reloads into the new code.
+self.addEventListener("message", (e) => { if (e.data === "SKIP_WAITING") self.skipWaiting(); });
 
 self.addEventListener("activate", (e) => {
   e.waitUntil(

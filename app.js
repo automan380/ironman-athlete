@@ -6,7 +6,8 @@
 (function () {
   "use strict";
 
-  const APP_VERSION = "2.3.1";          // shown in the settings menu; keep in step with CHANGELOG.md
+  const APP_VERSION = "2.3.2";          // shown in the settings menu; keep in step with CHANGELOG.md
+  let pendingReload = false;            // set when the athlete taps "update"; drives the one reload below
   const CFG = window.IRONMAN_CONFIG || {};
   // "Remember me on this device": when on, the session lives in localStorage and survives app
   // restarts; when off, it lives in sessionStorage and is gone once the app is closed. The backend
@@ -45,7 +46,9 @@
       select_all: "Select all", deselect: "Deselect", del_selected: "Delete", del_offline: "You're offline — connect to delete.",
       msg_placeholder: "Write your message…",
       n_message: "Message from your coach", n_plan: "Plan updated", n_zones: "Zones updated", n_app: "App updated",
-      app_updated: "App updated to v{v}. Please sign out and back in, and check the version under Settings.",
+      n_app_available: "Update available", app_available: "A new version of the app is ready — tap to update.",
+      app_update_now: "Update now",
+      app_updated: "App updated to v{v}.",
       theme: "Theme", theme_auto: "Auto", theme_light: "Light", theme_dark: "Dark", language: "Language",
       account: "Account", signed_in_as: "Signed in as", sync_now: "Sync now", syncing: "Syncing…",
       change_pw: "Change password", new_pw_ph: "New password", save_pw: "Save password",
@@ -105,7 +108,9 @@
       select_all: "Seleziona tutti", deselect: "Deseleziona", del_selected: "Cancella", del_offline: "Sei offline — collegati per cancellare.",
       msg_placeholder: "Scrivi il tuo messaggio…",
       n_message: "Messaggio dal coach", n_plan: "Piano aggiornato", n_zones: "Zone aggiornate", n_app: "App aggiornata",
-      app_updated: "App aggiornata alla v{v}. Esci e rientra, e controlla la versione nelle Impostazioni.",
+      n_app_available: "Aggiornamento disponibile", app_available: "È pronta una nuova versione dell'app — tocca per aggiornare.",
+      app_update_now: "Aggiorna ora",
+      app_updated: "App aggiornata alla v{v}.",
       theme: "Tema", theme_auto: "Auto", theme_light: "Chiaro", theme_dark: "Scuro", language: "Lingua",
       account: "Account", signed_in_as: "Connesso come", sync_now: "Sincronizza ora", syncing: "Sincronizzo…",
       change_pw: "Cambia password", new_pw_ph: "Nuova password", save_pw: "Salva password",
@@ -239,7 +244,7 @@
     logs: {}, outbox: {},
     fieldSpec: {}, weekIdx: null, section: "plan", view: "week", current: null,
     questionSpec: null, intakeResponse: null, intakeDraft: {}, intakeStep: "form", navChosen: false,
-    messages: [], appNotice: null,
+    messages: [], appNotice: null, swWaiting: null,
   };
   const lkey = (s) => `${s.on_date}|${s.session_key}`;
 
@@ -545,10 +550,27 @@
     else { badge.hidden = true; bell.classList.remove("lit"); }
   }
   function checkAppUpdate() {
-    let seen = null;
+    let seen = null, viaTap = false;
     try { seen = localStorage.getItem("app_seen_version"); } catch (e) { /* private mode */ }
-    if (seen && seen !== APP_VERSION) S.appNotice = { body: T("app_updated", { v: APP_VERSION }), unread: true };
+    try { viaTap = sessionStorage.getItem("updating_via_tap") === "1"; sessionStorage.removeItem("updating_via_tap"); } catch (e) { /* ignore */ }
+    // Confirm an update only when it happened on its own (a full relaunch swapped in the new worker).
+    // A tap-to-update already told the athlete, so skip the "updated" notice in that case.
+    if (seen && seen !== APP_VERSION && !viaTap) { S.appNotice = { body: T("app_updated", { v: APP_VERSION }), unread: true }; setBell(); }
     try { localStorage.setItem("app_seen_version", APP_VERSION); } catch (e) { /* ignore */ }
+  }
+  // A newer app version finished downloading in the background (the service worker is now waiting):
+  // light the bell with a "tap to update" notice, instead of silently swapping in a launch later.
+  function onUpdateReady(reg) {
+    S.swWaiting = (reg && reg.waiting) || null;
+    S.appNotice = { body: T("app_available"), unread: true, action: "update" };
+    setBell();
+    if (S.section === "inbox") renderInbox();
+  }
+  function applyUpdate() {
+    try { sessionStorage.setItem("updating_via_tap", "1"); } catch (e) { /* ignore */ }
+    pendingReload = true;                                   // the controllerchange handler reloads us
+    if (S.swWaiting) S.swWaiting.postMessage("SKIP_WAITING");
+    else location.reload();                                 // fallback: no waiting worker reference
   }
   async function pollMessages() {
     if (!navigator.onLine || !S.athleteId) return;
@@ -586,7 +608,7 @@
   }
   function noticeLabel(kind) {
     return kind === "plan_update" ? T("n_plan") : kind === "zones_update" ? T("n_zones")
-      : kind === "app" ? T("n_app") : T("n_message");
+      : kind === "app_available" ? T("n_app_available") : kind === "app" ? T("n_app") : T("n_message");
   }
   function renderInbox() {
     $("#back").hidden = true;
@@ -599,7 +621,7 @@
       <button id="msgsend" class="primary">${T("msg_send")}</button>
       <div id="msgmsg" class="msg" hidden></div></div>`;
     const items = [];
-    if (S.appNotice) items.push({ kind: "app", body: S.appNotice.body, created_at: null });
+    if (S.appNotice) items.push({ kind: S.appNotice.action === "update" ? "app_available" : "app", body: S.appNotice.body, created_at: null });
     (S.messages || []).forEach((m) => items.push(m));
     if (!items.length) html += `<div class="card"><p class="muted">${T("no_messages")}</p></div>`;
     else {
@@ -611,11 +633,13 @@
       html += items.map((m) => {
         const when = m.created_at ? ` <span class="muted small">${shortDay(m.created_at.slice(0, 10))}</span>` : "";
         const cb = m.id ? `<input type="checkbox" class="msgsel" value="${esc(m.id)}"> ` : "";
-        return `<div class="card"><div class="sectiontitle">${cb}${noticeLabel(m.kind)}${when}</div><p>${esc(m.body || "")}</p></div>`;
+        const act = m.kind === "app_available" ? `<button id="updnow" class="primary">${T("app_update_now")}</button>` : "";
+        return `<div class="card"><div class="sectiontitle">${cb}${noticeLabel(m.kind)}${when}</div><p>${esc(m.body || "")}</p>${act}</div>`;
       }).join("");
     }
     app.innerHTML = html;
     $("#msgsend").addEventListener("click", sendCoachMessage);
+    const upd = $("#updnow"); if (upd) upd.addEventListener("click", applyUpdate);
     const selall = $("#selall");
     if (selall) {
       selall.addEventListener("click", () => app.querySelectorAll(".msgsel").forEach((c) => { c.checked = true; }));
@@ -1155,7 +1179,24 @@
     else el.textContent = n ? T("sync_send", { n }) : T("sync_updated");
   }
   function registerSW() {
-    if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch((e) => console.warn("SW registration failed", e));
+    if (!("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.register("sw.js").then((reg) => {
+      if (reg.waiting && navigator.serviceWorker.controller) onUpdateReady(reg);   // one already waiting
+      reg.addEventListener("updatefound", () => {
+        const nw = reg.installing;
+        if (!nw) return;
+        nw.addEventListener("statechange", () => {
+          // "installed" while a controller already runs = an UPDATE (not the first install) is ready.
+          if (nw.state === "installed" && navigator.serviceWorker.controller) onUpdateReady(reg);
+        });
+      });
+      reg.update().catch(() => {});                                        // check promptly on boot…
+      document.addEventListener("visibilitychange", () => {               // …and whenever reopened
+        if (!document.hidden) reg.update().catch(() => {});
+      });
+    }).catch((e) => console.warn("SW registration failed", e));
+    // After the waiting worker takes over (our SKIP_WAITING), reload once into the new code.
+    navigator.serviceWorker.addEventListener("controllerchange", () => { if (pendingReload) location.reload(); });
   }
 
   boot();

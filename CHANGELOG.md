@@ -3,6 +3,16 @@
 All notable changes to the athlete app. The version here matches `APP_VERSION` in `app.js`
 (shown in the in-app settings menu). Dates are YYYY-MM-DD.
 
+## 2.3.2 — 2026-10-12
+- **"Update available" notification now arrives on time.** When a new version of the app has finished
+  downloading in the background, the bell lights with **"A new version of the app is ready — tap to
+  update"**; tapping it reloads straight into the new version (no more "sign out and back in"). Before,
+  the notice only appeared a launch *after* you were already updated, so it was easy to miss.
+- The app also checks for a new version as soon as you open or return to it.
+- Service-worker cache bumped to `v10`.
+- Note: this very update still lands the old way (reopen the app); from here on, every future update
+  shows the tap-to-update prompt.
+
 ## 2.3.1 — 2026-10-12
 - **Delete notifications**: in the bell list, tick messages (or Select all) and remove them with Delete. (You can clear notifications your coach sent; your messages to the coach stay with them.)
 - Service-worker cache bumped to `v9`.
