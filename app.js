@@ -6,7 +6,7 @@
 (function () {
   "use strict";
 
-  const APP_VERSION = "2.3.0";          // shown in the settings menu; keep in step with CHANGELOG.md
+  const APP_VERSION = "2.3.1";          // shown in the settings menu; keep in step with CHANGELOG.md
   const CFG = window.IRONMAN_CONFIG || {};
   // "Remember me on this device": when on, the session lives in localStorage and survives app
   // restarts; when off, it lives in sessionStorage and is gone once the app is closed. The backend
@@ -42,6 +42,7 @@
       nav_inbox: "Notifications", notifications: "Notifications", no_messages: "No notifications yet.",
       write_coach: "Message your coach", msg_kind: "About", kind_bug: "A bug / problem", kind_plan: "My training plan",
       msg_send: "Send", msg_sent: "Sent to your coach.", msg_offline: "You're offline — connect to send.",
+      select_all: "Select all", deselect: "Deselect", del_selected: "Delete", del_offline: "You're offline — connect to delete.",
       msg_placeholder: "Write your message…",
       n_message: "Message from your coach", n_plan: "Plan updated", n_zones: "Zones updated", n_app: "App updated",
       app_updated: "App updated to v{v}. Please sign out and back in, and check the version under Settings.",
@@ -101,6 +102,7 @@
       nav_inbox: "Notifiche", notifications: "Notifiche", no_messages: "Nessuna notifica.",
       write_coach: "Scrivi al coach", msg_kind: "Riguardo", kind_bug: "Un bug / problema", kind_plan: "Il mio piano",
       msg_send: "Invia", msg_sent: "Inviato al coach.", msg_offline: "Sei offline — collegati per inviare.",
+      select_all: "Seleziona tutti", deselect: "Deseleziona", del_selected: "Cancella", del_offline: "Sei offline — collegati per cancellare.",
       msg_placeholder: "Scrivi il tuo messaggio…",
       n_message: "Messaggio dal coach", n_plan: "Piano aggiornato", n_zones: "Zone aggiornate", n_app: "App aggiornata",
       app_updated: "App aggiornata alla v{v}. Esci e rientra, e controlla la versione nelle Impostazioni.",
@@ -600,12 +602,39 @@
     if (S.appNotice) items.push({ kind: "app", body: S.appNotice.body, created_at: null });
     (S.messages || []).forEach((m) => items.push(m));
     if (!items.length) html += `<div class="card"><p class="muted">${T("no_messages")}</p></div>`;
-    else html += items.map((m) => {
-      const when = m.created_at ? ` <span class="muted small">${shortDay(m.created_at.slice(0, 10))}</span>` : "";
-      return `<div class="card"><div class="sectiontitle">${noticeLabel(m.kind)}${when}</div><p>${esc(m.body || "")}</p></div>`;
-    }).join("");
+    else {
+      if ((S.messages || []).length) html +=
+        `<div class="inboxbar"><button id="selall" class="ghost">${T("select_all")}</button>` +
+        `<button id="selnone" class="ghost">${T("deselect")}</button>` +
+        `<button id="delsel" class="ghost danger">${T("del_selected")}</button></div>` +
+        `<div id="delmsg" class="msg" hidden></div>`;
+      html += items.map((m) => {
+        const when = m.created_at ? ` <span class="muted small">${shortDay(m.created_at.slice(0, 10))}</span>` : "";
+        const cb = m.id ? `<input type="checkbox" class="msgsel" value="${esc(m.id)}"> ` : "";
+        return `<div class="card"><div class="sectiontitle">${cb}${noticeLabel(m.kind)}${when}</div><p>${esc(m.body || "")}</p></div>`;
+      }).join("");
+    }
     app.innerHTML = html;
     $("#msgsend").addEventListener("click", sendCoachMessage);
+    const selall = $("#selall");
+    if (selall) {
+      selall.addEventListener("click", () => app.querySelectorAll(".msgsel").forEach((c) => { c.checked = true; }));
+      $("#selnone").addEventListener("click", () => app.querySelectorAll(".msgsel").forEach((c) => { c.checked = false; }));
+      $("#delsel").addEventListener("click", deleteSelectedMessages);
+    }
+  }
+  async function deleteSelectedMessages() {
+    const ids = [...app.querySelectorAll(".msgsel:checked")].map((c) => c.value), m = $("#delmsg");
+    if (!ids.length) return;
+    if (!navigator.onLine) { m.hidden = false; m.className = "msg err"; m.textContent = T("del_offline"); return; }
+    try {
+      const { error } = await SB.from("message").delete().in("id", ids);
+      if (error) throw error;
+      S.messages = (S.messages || []).filter((x) => ids.indexOf(x.id) < 0);
+      renderInbox(); setBell();
+    } catch (e) {
+      m.hidden = false; m.className = "msg err"; m.textContent = T("error") + ((e && e.message) || e);
+    }
   }
 
   // ================= auth / boot =================

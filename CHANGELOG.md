@@ -3,6 +3,10 @@
 All notable changes to the athlete app. The version here matches `APP_VERSION` in `app.js`
 (shown in the in-app settings menu). Dates are YYYY-MM-DD.
 
+## 2.3.1 — 2026-10-12
+- **Delete notifications**: in the bell list, tick messages (or Select all) and remove them with Delete. (You can clear notifications your coach sent; your messages to the coach stay with them.)
+- Service-worker cache bumped to `v9`.
+
 ## 2.3.0 — 2026-10-12
 - **Notifications bell** in the top bar: it lights with a count when you have unread messages. Tap it to see them; opening the list marks them read.
 - **Messages from your coach** appear there, plus automatic notices when your **plan** or your **zones** were updated (sync and check), and a notice when the **app itself updates** (sign out and back in, and check the version in Settings).
