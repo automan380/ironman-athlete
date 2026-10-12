@@ -3,6 +3,16 @@
 All notable changes to the athlete app. The version here matches `APP_VERSION` in `app.js`
 (shown in the in-app settings menu). Dates are YYYY-MM-DD.
 
+## 2.1.0 — 2026-10-12
+- **App renamed to "Ironman Planner"** in the top bar (was "Training"), matching the coach web app.
+- **Side menu** (tap the ☰): **Questionnaires · Plan · Zones · Account · Settings**. The gear is gone.
+- **Zones page**: your training zones for every discipline (swim / bike / run), with the range for each zone — the same zones the coach sees.
+- **Account page**: your email (fixed), **change password**, and sign out.
+- **Settings page**: theme, language, **Sync now**, and the app version.
+- **Log units**: the entry fields now show their units — mass before/after in **kg**, fluid in **ml**, carbs in **g**.
+- Service-worker cache bumped to `v6`.
+- (Questionnaires is a placeholder for now — filling them in on the app comes next.)
+
 ## 2.0.0 — 2026-10-12
 - **Login with email + password** instead of a magic link: sign in once and stay signed in, with **"Remember me on this device"**. No more waiting for a link on every open, and no broken email redirect on iPhone. Your coach sets up your login (a temporary password you then change under **Settings → Change password**).
 - **Works offline after the first sign-in**: when "remember me" is on, the cached plan opens even with no connection.

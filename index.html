@@ -10,20 +10,21 @@
   <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon-180.png">
   <link rel="stylesheet" href="styles.css">
-  <title>Training</title>
+  <title>Ironman Planner</title>
 </head>
 <body>
   <header id="topbar" hidden>
+    <button id="menu" class="iconbtn" aria-label="Menu">☰</button>
     <button id="back" class="iconbtn" hidden aria-label="Back">‹</button>
-    <a class="logo" id="brand" aria-label="Training">
+    <a class="logo" id="brand" aria-label="Ironman Planner">
       <img class="logomark" src="icons/logo.png" width="27" height="27" alt="" aria-hidden="true">
       <span class="wordmark"></span>
     </a>
     <div class="spacer"></div>
     <span id="sync" class="sync"></span>
-    <button id="gear" class="iconbtn" aria-label="Settings">⚙</button>
   </header>
-  <div id="settingspanel" class="settingspanel" hidden></div>
+  <div id="backdrop" class="backdrop" hidden></div>
+  <nav id="drawer" class="drawer" hidden></nav>
   <main id="app" aria-live="polite"></main>
 
   <script src="vendor/supabase.js"></script>

@@ -6,7 +6,7 @@
 (function () {
   "use strict";
 
-  const APP_VERSION = "2.0.0";          // shown in the settings menu; keep in step with CHANGELOG.md
+  const APP_VERSION = "2.1.0";          // shown in the settings menu; keep in step with CHANGELOG.md
   const CFG = window.IRONMAN_CONFIG || {};
   // "Remember me on this device": when on, the session lives in localStorage and survives app
   // restarts; when off, it lives in sessionStorage and is gone once the app is closed. The backend
@@ -25,7 +25,11 @@
   // ---------- i18n ----------
   const STR = {
     en: {
-      brand: "Training", signout: "Sign out", back: "Back", settings: "Settings",
+      brand: "Ironman Planner", signout: "Sign out", back: "Back", settings: "Settings", menu: "Menu",
+      nav_quest: "Questionnaires", nav_plan: "Plan", nav_zones: "Zones", nav_account: "Account", nav_settings: "Settings",
+      no_zones: "No test results yet — your zones will appear here once your coach records a test.",
+      threshold: "threshold", quest_soon: "You'll fill in your questionnaires here — coming soon.",
+      m_hr: "Heart rate", m_power: "Power", m_pace: "Pace",
       theme: "Theme", theme_auto: "Auto", theme_light: "Light", theme_dark: "Dark", language: "Language",
       account: "Account", signed_in_as: "Signed in as", sync_now: "Sync now", syncing: "Syncing…",
       change_pw: "Change password", new_pw_ph: "New password", save_pw: "Save password",
@@ -65,7 +69,11 @@
       moved_note: "Done on another day: the session will move once your coach syncs.",
     },
     it: {
-      brand: "Allenamenti", signout: "Esci", back: "Indietro", settings: "Impostazioni",
+      brand: "Ironman Planner", signout: "Esci", back: "Indietro", settings: "Impostazioni", menu: "Menu",
+      nav_quest: "Questionari", nav_plan: "Piano", nav_zones: "Zone", nav_account: "Account", nav_settings: "Impostazioni",
+      no_zones: "Nessun test ancora — le tue zone compariranno qui dopo che il coach registra un test.",
+      threshold: "soglia", quest_soon: "Qui compilerai i tuoi questionari — disponibile a breve.",
+      m_hr: "Frequenza cardiaca", m_power: "Potenza", m_pace: "Passo",
       theme: "Tema", theme_auto: "Auto", theme_light: "Chiaro", theme_dark: "Scuro", language: "Lingua",
       account: "Account", signed_in_as: "Connesso come", sync_now: "Sincronizza ora", syncing: "Sincronizzo…",
       change_pw: "Cambia password", new_pw_ph: "Nuova password", save_pw: "Salva password",
@@ -197,7 +205,7 @@
     athleteId: null, displayName: "", email: "", meta: null, prefs: {},
     weeks: [], sessions: [], tests: [], zones: {},
     logs: {}, outbox: {},
-    fieldSpec: {}, weekIdx: null, view: "week", current: null,
+    fieldSpec: {}, weekIdx: null, section: "plan", view: "week", current: null,
   };
   const lkey = (s) => `${s.on_date}|${s.session_key}`;
 
@@ -212,41 +220,107 @@
     document.title = T("brand");
     const b = $("#brand"); if (b) b.setAttribute("aria-label", T("brand"));
     const w = $(".wordmark"); if (w) w.textContent = T("brand");
-    const g = $("#gear"); if (g) g.setAttribute("aria-label", T("settings"));
+    const mb = $("#menu"); if (mb) mb.setAttribute("aria-label", T("menu"));
     const bk = $("#back"); if (bk) bk.setAttribute("aria-label", T("back"));
+    const dr = $("#drawer"); if (dr && !dr.hidden) renderDrawer();
     setSync();
   }
-  function renderSettings() {
-    const p = $("#settingspanel");
+  // ---------- side menu (drawer) + section navigation ----------
+  const NAV = [["questionnaires", "nav_quest"], ["plan", "nav_plan"], ["zones", "nav_zones"],
+               ["account", "nav_account"], ["settings", "nav_settings"]];
+  function renderDrawer() {
+    const d = $("#drawer");
+    d.innerHTML = NAV.map(([k, lbl]) =>
+      `<button class="drawitem ${S.section === k ? "active" : ""}" data-sec="${k}">${esc(T(lbl))}</button>`).join("");
+    d.querySelectorAll("[data-sec]").forEach((b) =>
+      b.addEventListener("click", () => go(b.getAttribute("data-sec"))));
+  }
+  function openDrawer() { renderDrawer(); $("#drawer").hidden = false; $("#backdrop").hidden = false; }
+  function closeDrawer() { const d = $("#drawer"); if (d) d.hidden = true; const bd = $("#backdrop"); if (bd) bd.hidden = true; }
+  function go(section) { S.section = section; S.current = null; closeDrawer(); renderSection(); scrollTop(); }
+
+  function renderSection() {
+    if (S.section === "plan") { if (S.current) renderSession(S.current); else renderWeek(); return; }
+    $("#back").hidden = true;
+    if (S.section === "zones") renderZones();
+    else if (S.section === "account") renderAccount();
+    else if (S.section === "settings") renderSettingsPage();
+    else if (S.section === "questionnaires") renderQuestionnaires();
+    else renderWeek();
+  }
+
+  // ---------- Zones page ----------
+  function mmss(sec) { sec = Math.round(sec || 0); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`; }
+  function metricLabel(m) {
+    if (!m) return "";
+    if (m.endsWith("_hr")) return T("m_hr");
+    if (m === "bike_power") return T("m_power");
+    if (m.endsWith("_pace")) return T("m_pace");
+    return "";
+  }
+  function fmtThreshold(m, v) {
+    if (v == null) return "";
+    return (m === "run_pace" || m === "swim_pace") ? mmss(v) : String(Math.round(v));
+  }
+  function renderZones() {
+    const list = Object.values(S.zones || {});
+    if (!list.length) { app.innerHTML = `<h2 class="pagetitle">${T("nav_zones")}</h2><div class="card"><p class="muted">${T("no_zones")}</p></div>`; return; }
+    let html = `<h2 class="pagetitle">${T("nav_zones")}</h2>`;
+    list.forEach((z) => {
+      const ml = metricLabel(z.metric);
+      html += `<div class="zonecard"><div class="zonehead">${cap(esc(z.sport))}${ml ? " · " + esc(ml) : ""}` +
+        ` <span class="note">${T("threshold")} ${esc(fmtThreshold(z.metric, z.threshold))}${z.unit ? " " + esc(z.unit) : ""}</span></div>` +
+        `<table class="ztable">` +
+        (z.zones || []).map((zz) =>
+          `<tr class="z"><td class="zn">Z${esc(zz.name)}</td><td>${esc(zz.label)}</td><td class="num">${esc(zz.range)}</td></tr>`).join("") +
+        `</table></div>`;
+    });
+    app.innerHTML = html;
+  }
+
+  // ---------- Account page ----------
+  function renderAccount() {
+    app.innerHTML = `<h2 class="pagetitle">${T("nav_account")}</h2>
+      <div class="card">
+        <div class="field"><label>${T("email")}</label><div class="readonly">${esc(S.email || "")}</div></div>
+        <button id="changepw" class="ghost">${T("change_pw")}</button>
+        <div id="pwbox" hidden>
+          <input id="newpw" type="password" autocomplete="new-password" placeholder="${T("new_pw_ph")}">
+          <button id="savepw" class="primary">${T("save_pw")}</button>
+          <div id="pwmsg" class="msg" hidden></div>
+        </div>
+        <button id="panelsignout" class="ghost">${T("signout")}</button>
+      </div>`;
+    $("#changepw").addEventListener("click", () => { const b = $("#pwbox"); b.hidden = !b.hidden; if (!b.hidden) $("#newpw").focus(); });
+    $("#savepw").addEventListener("click", changePassword);
+    $("#panelsignout").addEventListener("click", doSignOut);
+  }
+
+  // ---------- Settings page ----------
+  function renderSettingsPage() {
     const seg = (set, opts) => `<div class="segmented" data-set="${set}">` +
       opts.map(([v, lbl]) => `<button data-v="${v}" class="${S[set] === v ? "active" : ""}">${esc(lbl)}</button>`).join("") + `</div>`;
-    p.innerHTML =
-      `<div class="setgroup"><div class="setlabel">${T("theme")}</div>${seg("theme", [["auto", T("theme_auto")], ["light", T("theme_light")], ["dark", T("theme_dark")]])}</div>` +
-      `<div class="setgroup"><div class="setlabel">${T("language")}</div>${seg("lang", [["en", "English"], ["it", "Italiano"]])}</div>` +
-      `<div class="setgroup"><div class="setlabel">${T("account")}</div>` +
-        (S.email ? `<div class="small muted">${T("signed_in_as")}: ${esc(S.email)}</div>` : ``) +
-        `<button id="syncnow" class="ghost">${T("sync_now")}</button>` +
-        `<div id="syncmsg" class="msg" hidden></div>` +
-        `<button id="changepw" class="ghost">${T("change_pw")}</button>` +
-        `<div id="pwbox" hidden>` +
-          `<input id="newpw" type="password" autocomplete="new-password" placeholder="${T("new_pw_ph")}">` +
-          `<button id="savepw" class="primary">${T("save_pw")}</button>` +
-          `<div id="pwmsg" class="msg" hidden></div>` +
-        `</div>` +
-      `</div>` +
-      `<button id="panelsignout" class="ghost">${T("signout")}</button>` +
-      `<div class="setversion">v${APP_VERSION}</div>`;
-    p.querySelectorAll(".segmented").forEach((sg) => sg.querySelectorAll("button").forEach((b) =>
+    app.innerHTML = `<h2 class="pagetitle">${T("nav_settings")}</h2>
+      <div class="card">
+        <div class="setgroup"><div class="setlabel">${T("theme")}</div>${seg("theme", [["auto", T("theme_auto")], ["light", T("theme_light")], ["dark", T("theme_dark")]])}</div>
+        <div class="setgroup"><div class="setlabel">${T("language")}</div>${seg("lang", [["en", "English"], ["it", "Italiano"]])}</div>
+        <button id="syncnow" class="ghost">${T("sync_now")}</button>
+        <div id="syncmsg" class="msg" hidden></div>
+        <div class="setversion">v${APP_VERSION}</div>
+      </div>`;
+    app.querySelectorAll(".segmented").forEach((sg) => sg.querySelectorAll("button").forEach((b) =>
       b.addEventListener("click", () => {
         const set = sg.getAttribute("data-set"), v = b.getAttribute("data-v");
         S[set] = v; savePref(set, v);
-        if (set === "theme") applyTheme(); else { applyLang(); repaint(); }
-        renderSettings();
+        if (set === "theme") applyTheme(); else applyLang();
+        renderSettingsPage();
       })));
     $("#syncnow").addEventListener("click", syncNow);
-    $("#changepw").addEventListener("click", () => { const box = $("#pwbox"); box.hidden = !box.hidden; if (!box.hidden) $("#newpw").focus(); });
-    $("#savepw").addEventListener("click", changePassword);
-    $("#panelsignout").addEventListener("click", doSignOut);
+  }
+
+  // ---------- Questionnaires page (placeholder until iteration 2) ----------
+  function renderQuestionnaires() {
+    app.innerHTML = `<h2 class="pagetitle">${T("nav_quest")}</h2><div class="card"><p class="muted">${T("quest_soon")}</p></div>`;
   }
 
   async function syncNow() {
@@ -281,16 +355,13 @@
   async function boot() {
     loadPrefs(); applyTheme(); applyLang();
     registerSW();
-    $("#back").addEventListener("click", () => { S.view = "week"; S.current = null; renderWeek(); });
-    $("#gear").addEventListener("click", (e) => {
+    $("#back").addEventListener("click", () => { S.current = null; renderSection(); });
+    $("#menu").addEventListener("click", (e) => {
       e.stopPropagation();
-      const p = $("#settingspanel");
-      if (p.hidden) { renderSettings(); p.hidden = false; } else p.hidden = true;
+      const d = $("#drawer");
+      if (d.hidden) openDrawer(); else closeDrawer();
     });
-    document.addEventListener("click", (e) => {
-      const p = $("#settingspanel");
-      if (!p.hidden && !p.contains(e.target) && e.target.id !== "gear") p.hidden = true;
-    });
+    $("#backdrop").addEventListener("click", closeDrawer);
     window.addEventListener("online", () => { setSync(); flushOutbox().then(repaint); });
     window.addEventListener("offline", setSync);
     // Supabase runs this callback while holding the auth lock; calling any SB.* inside it deadlocks.
@@ -319,7 +390,7 @@
           if (S.weeks.length) {
             topbar.hidden = false;
             if (S.weekIdx == null) S.weekIdx = currentWeekIdx();
-            renderWeek(); setSync(); return;
+            renderSection(); setSync(); return;
           }
         }
       }
@@ -334,7 +405,7 @@
     }
     if (!S.weeks.length) await loadCache();
     if (S.weekIdx == null) S.weekIdx = currentWeekIdx();
-    renderWeek();
+    renderSection();
     if (navigator.onLine) {
       try { await refresh(); if (S.weekIdx == null) S.weekIdx = currentWeekIdx(); repaint(); } catch (e) { console.warn("refresh failed", e); }
       flushOutbox().then(repaint);
@@ -342,7 +413,9 @@
     setSync();
   }
 
-  function repaint() { if (S.view === "session" && S.current) renderSession(S.current); else renderWeek(); }
+  // Re-render only the data-driven sections after a sync, so a background refresh never clobbers a
+  // form the athlete is filling in (Account password, Settings).
+  function repaint() { if (S.section === "plan" || S.section === "zones") renderSection(); }
 
   // ================= data =================
   async function loadAthlete() {
@@ -393,7 +466,7 @@
 
   // ================= login =================
   function showLogin() {
-    topbar.hidden = true; $("#settingspanel").hidden = true;
+    topbar.hidden = true; closeDrawer();
     app.innerHTML = `
       <div class="login">
         <h1>${T("login_title")}</h1>
@@ -694,6 +767,8 @@
       ${box}`;
   }
 
+  // Static units shown beside the numeric log fields that carry one.
+  const UNIT_SUFFIX = { mass_before: "kg", mass_after: "kg", fluid_ml: "ml", carb_g: "g" };
   function fieldHtml(f, s, val) {
     const req = f.compulsory ? ` <span class="req">${T("required")}</span>` : "";
     const help = f.help ? `<div class="help">${esc(f.help)}</div>` : "";
@@ -710,7 +785,9 @@
       control = `<input id="f_${f.name}" name="${f.name}" type="text" value="${esc(val)}">`;
     } else {
       const step = f.kind === "float" ? "any" : "1";
-      control = `<input id="f_${f.name}" name="${f.name}" type="number" inputmode="${f.kind === "float" ? "decimal" : "numeric"}" step="${step}"${f.lo != null ? ` min="${f.lo}"` : ""}${f.hi != null ? ` max="${f.hi}"` : ""} value="${esc(val)}">`;
+      const input = `<input id="f_${f.name}" name="${f.name}" type="number" inputmode="${f.kind === "float" ? "decimal" : "numeric"}" step="${step}"${f.lo != null ? ` min="${f.lo}"` : ""}${f.hi != null ? ` max="${f.hi}"` : ""} value="${esc(val)}">`;
+      const u = UNIT_SUFFIX[f.name];
+      control = u ? `<div class="row2">${input}<span class="unitlabel">${u}</span></div>` : input;
     }
     return `<div class="field">${lab}${control}${help}</div>`;
   }
