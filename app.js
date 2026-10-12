@@ -6,10 +6,20 @@
 (function () {
   "use strict";
 
-  const APP_VERSION = "1.3.0";          // shown in the settings menu; keep in step with CHANGELOG.md
+  const APP_VERSION = "2.0.0";          // shown in the settings menu; keep in step with CHANGELOG.md
   const CFG = window.IRONMAN_CONFIG || {};
+  // "Remember me on this device": when on, the session lives in localStorage and survives app
+  // restarts; when off, it lives in sessionStorage and is gone once the app is closed. The backend
+  // is chosen live per read/write from the saved flag, so the login checkbox takes effect for the
+  // session it creates. Every access is guarded for private mode.
+  function rememberOn() { try { return localStorage.getItem("remember") !== "0"; } catch (e) { return true; } }
+  const authStorage = {
+    getItem(k) { try { return (rememberOn() ? localStorage : sessionStorage).getItem(k); } catch (e) { return null; } },
+    setItem(k, v) { try { (rememberOn() ? localStorage : sessionStorage).setItem(k, v); } catch (e) { /* private mode */ } },
+    removeItem(k) { try { localStorage.removeItem(k); } catch (e) { /* ignore */ } try { sessionStorage.removeItem(k); } catch (e) { /* ignore */ } },
+  };
   const SB = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {
-    auth: { persistSession: true, detectSessionInUrl: true, autoRefreshToken: true },
+    auth: { persistSession: true, detectSessionInUrl: false, autoRefreshToken: true, storage: authStorage },
   });
 
   // ---------- i18n ----------
@@ -17,11 +27,19 @@
     en: {
       brand: "Training", signout: "Sign out", back: "Back", settings: "Settings",
       theme: "Theme", theme_auto: "Auto", theme_light: "Light", theme_dark: "Dark", language: "Language",
+      account: "Account", signed_in_as: "Signed in as", sync_now: "Sync now", syncing: "Syncing…",
+      change_pw: "Change password", new_pw_ph: "New password", save_pw: "Save password",
+      pw_saved: "Password updated.", pw_short: "Use at least 6 characters.",
+      totals: "Totals", t_plan: "plan", t_done: "done", t_total: "Total",
       sync_updated: "up to date", sync_offline: "offline", sync_offline_q: "offline · {n} queued", sync_send: "{n} to send…",
       login_title: "Your training",
-      login_sub: "Sign in with your email: you get a link, open it and you're in. No password.",
-      email: "Email", email_ph: "you@example.com", send_link: "Send me the link", sending: "Sending…",
-      enter_email: "Enter your email.", link_sent: "Done. Check your inbox (and spam) and open the link to sign in.",
+      login_sub: "Sign in with your email and password. Your coach sets up your login.",
+      email: "Email", email_ph: "you@example.com",
+      password: "Password", password_ph: "Your password", remember: "Remember me on this device",
+      signin: "Sign in", signing_in: "Signing in…",
+      enter_email: "Enter your email.", enter_password: "Enter your password.",
+      bad_login: "Wrong email or password, or your coach hasn't set up your login yet.",
+      first_login_hint: "First time? Sign in with the temporary password your coach gave you, then change it in Settings.",
       error: "Error: ",
       no_plan: "No plan available yet.",
       no_plan_sub: "If your coach just published, try again shortly (the first load needs a connection).",
@@ -49,11 +67,19 @@
     it: {
       brand: "Allenamenti", signout: "Esci", back: "Indietro", settings: "Impostazioni",
       theme: "Tema", theme_auto: "Auto", theme_light: "Chiaro", theme_dark: "Scuro", language: "Lingua",
+      account: "Account", signed_in_as: "Connesso come", sync_now: "Sincronizza ora", syncing: "Sincronizzo…",
+      change_pw: "Cambia password", new_pw_ph: "Nuova password", save_pw: "Salva password",
+      pw_saved: "Password aggiornata.", pw_short: "Usa almeno 6 caratteri.",
+      totals: "Totali", t_plan: "prev.", t_done: "fatto", t_total: "Totale",
       sync_updated: "aggiornato", sync_offline: "offline", sync_offline_q: "offline · {n} in coda", sync_send: "{n} da inviare…",
       login_title: "I tuoi allenamenti",
-      login_sub: "Accedi con la tua email: ti arriva un link, lo apri e sei dentro. Niente password.",
-      email: "Email", email_ph: "tu@esempio.com", send_link: "Inviami il link", sending: "Invio…",
-      enter_email: "Scrivi la tua email.", link_sent: "Fatto. Controlla la posta (anche lo spam) e apri il link per entrare.",
+      login_sub: "Accedi con email e password. L'accesso te lo crea il coach.",
+      email: "Email", email_ph: "tu@esempio.com",
+      password: "Password", password_ph: "La tua password", remember: "Ricordami su questo dispositivo",
+      signin: "Accedi", signing_in: "Accesso…",
+      enter_email: "Scrivi la tua email.", enter_password: "Scrivi la password.",
+      bad_login: "Email o password errate, oppure il coach non ha ancora creato il tuo accesso.",
+      first_login_hint: "Primo accesso? Entra con la password temporanea che ti ha dato il coach, poi cambiala nelle Impostazioni.",
       error: "Errore: ",
       no_plan: "Nessun piano ancora disponibile.",
       no_plan_sub: "Se il coach ha appena pubblicato, riprova tra poco (serve la rete la prima volta).",
@@ -168,7 +194,7 @@
   // ---------- state ----------
   const S = {
     lang: "en", theme: "auto",
-    athleteId: null, displayName: "", meta: null, prefs: {},
+    athleteId: null, displayName: "", email: "", meta: null, prefs: {},
     weeks: [], sessions: [], tests: [], zones: {},
     logs: {}, outbox: {},
     fieldSpec: {}, weekIdx: null, view: "week", current: null,
@@ -197,6 +223,17 @@
     p.innerHTML =
       `<div class="setgroup"><div class="setlabel">${T("theme")}</div>${seg("theme", [["auto", T("theme_auto")], ["light", T("theme_light")], ["dark", T("theme_dark")]])}</div>` +
       `<div class="setgroup"><div class="setlabel">${T("language")}</div>${seg("lang", [["en", "English"], ["it", "Italiano"]])}</div>` +
+      `<div class="setgroup"><div class="setlabel">${T("account")}</div>` +
+        (S.email ? `<div class="small muted">${T("signed_in_as")}: ${esc(S.email)}</div>` : ``) +
+        `<button id="syncnow" class="ghost">${T("sync_now")}</button>` +
+        `<div id="syncmsg" class="msg" hidden></div>` +
+        `<button id="changepw" class="ghost">${T("change_pw")}</button>` +
+        `<div id="pwbox" hidden>` +
+          `<input id="newpw" type="password" autocomplete="new-password" placeholder="${T("new_pw_ph")}">` +
+          `<button id="savepw" class="primary">${T("save_pw")}</button>` +
+          `<div id="pwmsg" class="msg" hidden></div>` +
+        `</div>` +
+      `</div>` +
       `<button id="panelsignout" class="ghost">${T("signout")}</button>` +
       `<div class="setversion">v${APP_VERSION}</div>`;
     p.querySelectorAll(".segmented").forEach((sg) => sg.querySelectorAll("button").forEach((b) =>
@@ -206,7 +243,38 @@
         if (set === "theme") applyTheme(); else { applyLang(); repaint(); }
         renderSettings();
       })));
+    $("#syncnow").addEventListener("click", syncNow);
+    $("#changepw").addEventListener("click", () => { const box = $("#pwbox"); box.hidden = !box.hidden; if (!box.hidden) $("#newpw").focus(); });
+    $("#savepw").addEventListener("click", changePassword);
     $("#panelsignout").addEventListener("click", doSignOut);
+  }
+
+  async function syncNow() {
+    const btn = $("#syncnow"), m = $("#syncmsg");
+    if (!navigator.onLine) { m.hidden = false; m.className = "msg err"; m.textContent = T("sync_offline"); return; }
+    btn.disabled = true; const t = btn.textContent; btn.textContent = T("syncing");
+    try {
+      await flushOutbox();
+      await refresh();
+      repaint(); setSync();
+      m.hidden = false; m.className = "msg info"; m.textContent = T("sync_updated");
+    } catch (e) {
+      m.hidden = false; m.className = "msg err"; m.textContent = T("error") + ((e && e.message) || e);
+    } finally { btn.disabled = false; btn.textContent = t; }
+  }
+
+  async function changePassword() {
+    const inp = $("#newpw"), m = $("#pwmsg"), btn = $("#savepw");
+    const pw = (inp.value || "");
+    if (pw.length < 6) { m.hidden = false; m.className = "msg err"; m.textContent = T("pw_short"); return; }
+    btn.disabled = true;
+    try {
+      const { error } = await SB.auth.updateUser({ password: pw });
+      if (error) throw error;
+      inp.value = ""; m.hidden = false; m.className = "msg info"; m.textContent = T("pw_saved");
+    } catch (e) {
+      m.hidden = false; m.className = "msg err"; m.textContent = T("error") + ((e && e.message) || e);
+    } finally { btn.disabled = false; }
   }
 
   // ================= auth / boot =================
@@ -240,7 +308,24 @@
 
   async function _route() {
     const { data } = await SB.auth.getSession();
-    if (!data || !data.session) { showLogin(); return; }
+    const session = data && data.session;
+    if (!session) {
+      // No session. If "remember me" is on and we're offline, show the plan we already cached
+      // instead of blocking on a login the athlete cannot complete without a connection.
+      if (!navigator.onLine && rememberOn()) {
+        await loadAthlete();                       // offline branch reads the cached athlete
+        if (S.athleteId) {
+          await loadCache();
+          if (S.weeks.length) {
+            topbar.hidden = false;
+            if (S.weekIdx == null) S.weekIdx = currentWeekIdx();
+            renderWeek(); setSync(); return;
+          }
+        }
+      }
+      showLogin(); return;
+    }
+    S.email = (session.user && session.user.email) || "";
     topbar.hidden = false;
     if (!S.athleteId) await loadAthlete();
     if (!S.athleteId && navigator.onLine) {   // signed in, but this email is linked to no athlete
@@ -318,8 +403,14 @@
             <label for="email">${T("email")}</label>
             <input id="email" type="email" inputmode="email" autocomplete="email" placeholder="${T("email_ph")}">
           </div>
-          <button id="send" class="primary" type="button">${T("send_link")}</button>
-          <div id="loginmsg" class="msg info" hidden></div>
+          <div class="field">
+            <label for="password">${T("password")}</label>
+            <input id="password" type="password" autocomplete="current-password" placeholder="${T("password_ph")}">
+          </div>
+          <label class="check"><input id="remember" type="checkbox" ${rememberOn() ? "checked" : ""}> ${T("remember")}</label>
+          <button id="signin" class="primary" type="button">${T("signin")}</button>
+          <div id="loginmsg" class="msg err" hidden></div>
+          <p class="note">${T("first_login_hint")}</p>
         </div>
         <div class="segmented" data-set="lang" style="max-width:16rem">
           <button data-v="en" class="${S.lang === "en" ? "active" : ""}">English</button>
@@ -330,18 +421,27 @@
       S.lang = b.getAttribute("data-v"); savePref("lang", S.lang); applyLang(); showLogin();
     }));
     const msg = $("#loginmsg");
-    $("#send").addEventListener("click", async function () {
+    const showErr = (txt) => { msg.hidden = false; msg.className = "msg err"; msg.textContent = txt; };
+    async function doSignIn() {
       const email = $("#email").value.trim().toLowerCase();
-      if (!email) { msg.hidden = false; msg.className = "msg err"; msg.textContent = T("enter_email"); return; }
-      this.disabled = true; const t = this.textContent; this.textContent = T("sending");
+      const password = $("#password").value;
+      if (!email) return showErr(T("enter_email"));
+      if (!password) return showErr(T("enter_password"));
+      // Save the remember choice BEFORE signing in, so the new session lands in the right store.
+      savePref("remember", $("#remember").checked ? "1" : "0");
+      const btn = $("#signin"); btn.disabled = true; const t = btn.textContent; btn.textContent = T("signing_in");
       try {
-        const { error } = await SB.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } });
+        const { error } = await SB.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        msg.hidden = false; msg.className = "msg info"; msg.textContent = T("link_sent");
+        // onAuthStateChange re-routes us into the app.
       } catch (e) {
-        msg.hidden = false; msg.className = "msg err"; msg.textContent = T("error") + (e.message || e);
-      } finally { this.disabled = false; this.textContent = t; }
-    });
+        const m = ((e && e.message) || "").toLowerCase();
+        showErr(m.includes("invalid") || m.includes("credential") ? T("bad_login") : T("error") + ((e && e.message) || e));
+        btn.disabled = false; btn.textContent = t;
+      }
+    }
+    $("#signin").addEventListener("click", doSignIn);
+    $("#password").addEventListener("keydown", (e) => { if (e.key === "Enter") doSignIn(); });
   }
 
   function renderNotConnected(email) {
@@ -375,6 +475,28 @@
     const c = rec.payload && rec.payload.completed;
     const done = c === "1" || c === 1 || c === "yes" || c === true;
     return { rec, done, pending: !!pend, doneOn: rec.done_on };
+  }
+
+  // Planned vs done minutes per sport for a week — same logic as the coach calendar's Totals column:
+  // planned = sum of session minutes by sport; done = sum of logged minutes of COMPLETED sessions,
+  // counted against the planned (date, session_key) so a "done on another day" log stays in its week.
+  const SPORT_ORDER = ["swim", "bike", "run", "strength"];
+  function weekTotals(monday) {
+    const planned = {}, done = {};
+    for (let i = 0; i < 7; i++) {
+      sessionsOn(addDays(monday, i)).forEach((s) => {
+        planned[s.sport] = (planned[s.sport] || 0) + (s.minutes || 0);
+        const st = logState(s);
+        if (st && st.done) done[s.sport] = (done[s.sport] || 0) + (Number((st.rec.payload || {}).minutes) || 0);
+      });
+    }
+    const extra = Object.keys(Object.assign({}, planned, done)).filter((s) => SPORT_ORDER.indexOf(s) < 0);
+    const rows = [];
+    SPORT_ORDER.concat(extra).forEach((sport) => {
+      const pl = planned[sport] || 0, dn = done[sport] || 0;
+      if (pl || dn) rows.push({ sport, planned: pl, done: dn });
+    });
+    return rows;
   }
 
   function renderWeek() {
@@ -421,6 +543,21 @@
       }
       html += `</div>`;
     }
+
+    const trows = weekTotals(w.monday);
+    if (trows.length) {
+      let tp = 0, td = 0;
+      const body = trows.map((r) => {
+        tp += r.planned; td += r.done;
+        return `<tr class="${esc(r.sport)}"><td><span class="sport"><span class="dot"></span>${cap(esc(r.sport))}</span></td>` +
+               `<td class="num">${hhmm(r.planned)}</td><td class="num">${r.done ? hhmm(r.done) : "—"}</td></tr>`;
+      }).join("");
+      html += `<div class="weektotals"><div class="tothead">${T("totals")}</div>` +
+        `<table class="tot"><thead><tr><th></th><th class="num">${T("t_plan")}</th><th class="num">${T("t_done")}</th></tr></thead>` +
+        `<tbody>${body}</tbody>` +
+        `<tbody><tr class="sum"><td>${T("t_total")}</td><td class="num">${hhmm(tp)}</td><td class="num">${hhmm(td)}</td></tr></tbody></table></div>`;
+    }
+
     app.innerHTML = html;
     $("#prev").addEventListener("click", () => { if (S.weekIdx > 0) { S.weekIdx--; renderWeek(); scrollTop(); } });
     $("#next").addEventListener("click", () => { if (S.weekIdx < S.weeks.length - 1) { S.weekIdx++; renderWeek(); scrollTop(); } });

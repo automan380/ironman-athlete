@@ -4,6 +4,7 @@
   --line: #e0dedb; --accent: #c8102e; --accent-fg: #ffffff;
   --ok: #1f6b3a; --warn: #8a4b00; --skip: #8a8a90; --bad: #a11b17;
   --topbar-bg: #0b0b0c; --topbar-fg: #ededf0;      /* the brand bar: near-black in both themes */
+  --swim: #1e7ec8; --bike: #d92b2b; --run: #1f9d55; --strength: #1a1a1c;  /* sport colours (coach webapp) */
   --radius: 10px;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color-scheme: light;
@@ -12,13 +13,15 @@
   :root:not([data-theme="light"]) {
     --bg: #0d0d0f; --surface: #17181b; --surface2: #1f2024; --fg: #f2f1ef; --muted: #9b9ba3;
     --line: #2b2c31; --accent: #e8323c; --accent-fg: #ffffff;
-    --ok: #7fc296; --warn: #e0a566; --skip: #7c7c85; --bad: #ef6b64; color-scheme: dark;
+    --ok: #7fc296; --warn: #e0a566; --skip: #7c7c85; --bad: #ef6b64;
+    --swim: #4ea8e8; --bike: #f2564f; --run: #46c07c; --strength: #b9bac2; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #0d0d0f; --surface: #17181b; --surface2: #1f2024; --fg: #f2f1ef; --muted: #9b9ba3;
   --line: #2b2c31; --accent: #e8323c; --accent-fg: #ffffff;
-  --ok: #7fc296; --warn: #e0a566; --skip: #7c7c85; --bad: #ef6b64; color-scheme: dark;
+  --ok: #7fc296; --warn: #e0a566; --skip: #7c7c85; --bad: #ef6b64;
+  --swim: #4ea8e8; --bike: #f2564f; --run: #46c07c; --strength: #b9bac2; color-scheme: dark;
 }
 
 /* Make [hidden] always win over any component display rule (fixes the stuck settings panel). */
@@ -35,7 +38,7 @@ body { background: var(--bg); color: var(--fg); font-family: var(--sans); line-h
           background: var(--topbar-bg); color: var(--topbar-fg); }
 #topbar .spacer { flex: 1; }
 .logo { display: flex; align-items: center; gap: .5rem; text-decoration: none; color: var(--topbar-fg); }
-.logomark { display: block; flex: none; }
+.logomark { display: block; flex: none; width: 27px; height: 27px; border-radius: 50%; }
 .wordmark { font-weight: 800; letter-spacing: .09em; text-transform: uppercase; font-size: .95rem; }
 .iconbtn { font: inherit; font-weight: 600; background: rgba(255,255,255,.14); color: var(--topbar-fg);
            border: none; border-radius: 8px; padding: .35rem .6rem; cursor: pointer; line-height: 1; }
@@ -61,6 +64,9 @@ button:disabled { opacity: .55; }
 .msg { font-size: .9rem; border-radius: 8px; padding: .6rem .75rem; }
 .msg.info { background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .msg.err { background: color-mix(in srgb, var(--bad) 16%, transparent); color: var(--bad); }
+.check { display: flex; align-items: center; gap: .5rem; text-transform: none; letter-spacing: 0;
+         font-weight: 500; color: var(--fg); font-size: .9rem; }
+.check input { width: auto; }
 .muted { color: var(--muted); }
 .small { font-size: .85rem; }
 
@@ -96,6 +102,23 @@ button:disabled { opacity: .55; }
 .chip.skip { background: color-mix(in srgb, var(--skip) 24%, transparent); color: var(--skip); }
 .chip.pend { background: color-mix(in srgb, var(--warn) 22%, transparent); color: var(--warn); }
 .chevron { color: var(--muted); flex: none; }
+
+/* Weekly totals (plan / done per sport) — mirrors the coach calendar's Totals column */
+.weektotals { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.weektotals > .tothead { padding: .5rem .8rem; font-weight: 700; background: var(--surface2); border-bottom: 1px solid var(--line); }
+table.tot { width: 100%; border-collapse: collapse; font-size: .9rem; }
+table.tot th, table.tot td { padding: .4rem .8rem; text-align: left; }
+table.tot thead th { font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+table.tot td.num, table.tot th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.tot tbody tr { border-top: 1px solid var(--line); }
+table.tot .sport { display: inline-flex; align-items: center; gap: .45rem; }
+table.tot .dot { width: .7rem; height: .7rem; border-radius: 50%; flex: none; }
+table.tot tr.swim .dot { background: var(--swim); }
+table.tot tr.bike .dot { background: var(--bike); }
+table.tot tr.run .dot { background: var(--run); }
+table.tot tr.strength .dot { background: var(--strength); }
+table.tot tr.sum { border-top: 2px solid var(--line); font-weight: 700; }
+table.tot .dist { color: var(--muted); font-weight: 400; margin-left: .35rem; }
 
 /* Session detail */
 .detail h1 { font-size: 1.25rem; margin: 0 0 .25rem; }
