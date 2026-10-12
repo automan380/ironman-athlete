@@ -3,6 +3,13 @@
 All notable changes to the athlete app. The version here matches `APP_VERSION` in `app.js`
 (shown in the in-app settings menu). Dates are YYYY-MM-DD.
 
+## 2.3.0 — 2026-10-12
+- **Notifications bell** in the top bar: it lights with a count when you have unread messages. Tap it to see them; opening the list marks them read.
+- **Messages from your coach** appear there, plus automatic notices when your **plan** or your **zones** were updated (sync and check), and a notice when the **app itself updates** (sign out and back in, and check the version in Settings).
+- **Message your coach** from the same screen — choose whether it's about a **bug** or your **training plan**.
+- The bell refreshes when you open the app, every minute while it's open, and when the connection returns.
+- Service-worker cache bumped to `v8`.
+
 ## 2.2.0 — 2026-10-12
 - **Fill in your questionnaire in the app.** A new athlete with no plan yet lands on **Questionnaires** and answers the intake questions (who you are, your week, current ability, targets, experience, equipment, health, the race) right on the phone. Fill it in over time — your answers are saved on the device — then **Review** and **Send to coach**. Your coach's app builds and publishes your plan automatically, and it appears under **Plan**.
 - Once the plan is built, the questionnaire is shown read-only (your submitted answers).

@@ -6,7 +6,7 @@
 (function () {
   "use strict";
 
-  const APP_VERSION = "2.2.0";          // shown in the settings menu; keep in step with CHANGELOG.md
+  const APP_VERSION = "2.3.0";          // shown in the settings menu; keep in step with CHANGELOG.md
   const CFG = window.IRONMAN_CONFIG || {};
   // "Remember me on this device": when on, the session lives in localStorage and survives app
   // restarts; when off, it lives in sessionStorage and is gone once the app is closed. The backend
@@ -39,6 +39,12 @@
       quest_offline_fill: "You're offline — your answers are saved. Connect to send them.",
       quest_answer: "Please answer: {q}", coach_only: "For your coach — not used to build the plan",
       yes: "Yes", no: "No", unanswered: "—",
+      nav_inbox: "Notifications", notifications: "Notifications", no_messages: "No notifications yet.",
+      write_coach: "Message your coach", msg_kind: "About", kind_bug: "A bug / problem", kind_plan: "My training plan",
+      msg_send: "Send", msg_sent: "Sent to your coach.", msg_offline: "You're offline — connect to send.",
+      msg_placeholder: "Write your message…",
+      n_message: "Message from your coach", n_plan: "Plan updated", n_zones: "Zones updated", n_app: "App updated",
+      app_updated: "App updated to v{v}. Please sign out and back in, and check the version under Settings.",
       theme: "Theme", theme_auto: "Auto", theme_light: "Light", theme_dark: "Dark", language: "Language",
       account: "Account", signed_in_as: "Signed in as", sync_now: "Sync now", syncing: "Syncing…",
       change_pw: "Change password", new_pw_ph: "New password", save_pw: "Save password",
@@ -92,6 +98,12 @@
       quest_offline_fill: "Sei offline — le risposte sono salvate. Collegati per inviarle.",
       quest_answer: "Rispondi a: {q}", coach_only: "Per il coach — non usato per costruire il piano",
       yes: "Sì", no: "No", unanswered: "—",
+      nav_inbox: "Notifiche", notifications: "Notifiche", no_messages: "Nessuna notifica.",
+      write_coach: "Scrivi al coach", msg_kind: "Riguardo", kind_bug: "Un bug / problema", kind_plan: "Il mio piano",
+      msg_send: "Invia", msg_sent: "Inviato al coach.", msg_offline: "Sei offline — collegati per inviare.",
+      msg_placeholder: "Scrivi il tuo messaggio…",
+      n_message: "Messaggio dal coach", n_plan: "Piano aggiornato", n_zones: "Zone aggiornate", n_app: "App aggiornata",
+      app_updated: "App aggiornata alla v{v}. Esci e rientra, e controlla la versione nelle Impostazioni.",
       theme: "Tema", theme_auto: "Auto", theme_light: "Chiaro", theme_dark: "Scuro", language: "Lingua",
       account: "Account", signed_in_as: "Connesso come", sync_now: "Sincronizza ora", syncing: "Sincronizzo…",
       change_pw: "Cambia password", new_pw_ph: "Nuova password", save_pw: "Salva password",
@@ -225,6 +237,7 @@
     logs: {}, outbox: {},
     fieldSpec: {}, weekIdx: null, section: "plan", view: "week", current: null,
     questionSpec: null, intakeResponse: null, intakeDraft: {}, intakeStep: "form", navChosen: false,
+    messages: [], appNotice: null,
   };
   const lkey = (s) => `${s.on_date}|${s.session_key}`;
 
@@ -265,6 +278,7 @@
     else if (S.section === "account") renderAccount();
     else if (S.section === "settings") renderSettingsPage();
     else if (S.section === "questionnaires") renderQuestionnaires();
+    else if (S.section === "inbox") renderInbox();
     else renderWeek();
   }
 
@@ -517,10 +531,88 @@
     } finally { btn.disabled = false; }
   }
 
+  // ================= notifications / messages =================
+  function unreadCount() {
+    return (S.messages || []).filter((m) => !m.read_at).length + (S.appNotice && S.appNotice.unread ? 1 : 0);
+  }
+  function setBell() {
+    const bell = $("#bell"), badge = $("#bellbadge");
+    if (!bell || !badge) return;
+    const n = unreadCount();
+    if (n > 0) { badge.textContent = n > 9 ? "9+" : String(n); badge.hidden = false; bell.classList.add("lit"); }
+    else { badge.hidden = true; bell.classList.remove("lit"); }
+  }
+  function checkAppUpdate() {
+    let seen = null;
+    try { seen = localStorage.getItem("app_seen_version"); } catch (e) { /* private mode */ }
+    if (seen && seen !== APP_VERSION) S.appNotice = { body: T("app_updated", { v: APP_VERSION }), unread: true };
+    try { localStorage.setItem("app_seen_version", APP_VERSION); } catch (e) { /* ignore */ }
+  }
+  async function pollMessages() {
+    if (!navigator.onLine || !S.athleteId) return;
+    try {
+      const { data } = await SB.from("message").select("id,kind,body,created_at,read_at")
+        .eq("direction", "out").order("created_at", { ascending: false });
+      if (data) { S.messages = data; setBell(); }
+    } catch (e) { /* ignore */ }
+  }
+  async function markMessagesRead() {
+    if (S.appNotice) S.appNotice.unread = false;
+    const unread = (S.messages || []).filter((m) => !m.read_at);
+    if (unread.length) {
+      const now = new Date().toISOString();
+      unread.forEach((m) => { m.read_at = now; });     // optimistic
+      if (navigator.onLine) {
+        try { await SB.from("message").update({ read_at: now }).eq("direction", "out").is("read_at", null); }
+        catch (e) { /* will re-light on next refresh */ }
+      }
+    }
+    setBell();
+  }
+  async function sendCoachMessage() {
+    const body = ($("#msgbody").value || "").trim(), kind = $("#msgkind").value || "plan", m = $("#msgmsg");
+    if (!body) return;
+    if (!navigator.onLine) { m.hidden = false; m.className = "msg err"; m.textContent = T("msg_offline"); return; }
+    const btn = $("#msgsend"); btn.disabled = true; const t = btn.textContent; btn.textContent = T("sending");
+    try {
+      const { error } = await SB.from("message").insert({ athlete_id: S.athleteId, direction: "in", kind, body, device_id: deviceId() });
+      if (error) throw error;
+      $("#msgbody").value = ""; m.hidden = false; m.className = "msg info"; m.textContent = T("msg_sent");
+    } catch (e) {
+      m.hidden = false; m.className = "msg err"; m.textContent = T("error") + ((e && e.message) || e);
+    } finally { btn.disabled = false; btn.textContent = t; }
+  }
+  function noticeLabel(kind) {
+    return kind === "plan_update" ? T("n_plan") : kind === "zones_update" ? T("n_zones")
+      : kind === "app" ? T("n_app") : T("n_message");
+  }
+  function renderInbox() {
+    $("#back").hidden = true;
+    markMessagesRead();
+    let html = `<h2 class="pagetitle">${T("notifications")}</h2>`;
+    html += `<div class="card"><div class="sectiontitle">${T("write_coach")}</div>
+      <div class="field"><label for="msgkind">${T("msg_kind")}</label>
+        <select id="msgkind"><option value="plan">${T("kind_plan")}</option><option value="bug">${T("kind_bug")}</option></select></div>
+      <div class="field"><textarea id="msgbody" rows="3" placeholder="${T("msg_placeholder")}"></textarea></div>
+      <button id="msgsend" class="primary">${T("msg_send")}</button>
+      <div id="msgmsg" class="msg" hidden></div></div>`;
+    const items = [];
+    if (S.appNotice) items.push({ kind: "app", body: S.appNotice.body, created_at: null });
+    (S.messages || []).forEach((m) => items.push(m));
+    if (!items.length) html += `<div class="card"><p class="muted">${T("no_messages")}</p></div>`;
+    else html += items.map((m) => {
+      const when = m.created_at ? ` <span class="muted small">${shortDay(m.created_at.slice(0, 10))}</span>` : "";
+      return `<div class="card"><div class="sectiontitle">${noticeLabel(m.kind)}${when}</div><p>${esc(m.body || "")}</p></div>`;
+    }).join("");
+    app.innerHTML = html;
+    $("#msgsend").addEventListener("click", sendCoachMessage);
+  }
+
   // ================= auth / boot =================
   async function boot() {
     loadPrefs(); applyTheme(); applyLang();
     registerSW();
+    checkAppUpdate();
     $("#back").addEventListener("click", () => { S.current = null; renderSection(); });
     $("#menu").addEventListener("click", (e) => {
       e.stopPropagation();
@@ -528,8 +620,11 @@
       if (d.hidden) openDrawer(); else closeDrawer();
     });
     $("#backdrop").addEventListener("click", closeDrawer);
-    window.addEventListener("online", () => { setSync(); flushOutbox().then(repaint); });
+    $("#bell").addEventListener("click", () => go("inbox"));
+    window.addEventListener("online", () => { setSync(); flushOutbox().then(repaint); pollMessages(); });
     window.addEventListener("offline", setSync);
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) pollMessages(); });
+    setInterval(pollMessages, 60000);
     // Supabase runs this callback while holding the auth lock; calling any SB.* inside it deadlocks.
     // Defer to the next tick, out of the lock, before (re-)routing.
     SB.auth.onAuthStateChange(() => { setTimeout(route, 0); });
@@ -556,7 +651,7 @@
           if (S.weeks.length) {
             topbar.hidden = false;
             if (S.weekIdx == null) S.weekIdx = currentWeekIdx();
-            renderSection(); setSync(); return;
+            renderSection(); setSync(); setBell(); return;
           }
         }
       }
@@ -577,7 +672,7 @@
       try { await refresh(); if (S.weekIdx == null) S.weekIdx = currentWeekIdx(); gateSection(); renderSection(); } catch (e) { console.warn("refresh failed", e); }
       flushOutbox().then(repaint);
     }
-    setSync();
+    setSync(); setBell();
   }
 
   // The home follows whether a plan exists — questionnaire when there's none, Plan once there is —
@@ -620,7 +715,7 @@
     S.fieldSpec = {}; ((S.meta && S.meta.field_spec) || []).forEach((f) => { S.fieldSpec[f.name] = f; });
   }
   async function refresh() {
-    const [meta, weeks, sessions, tests, zones, logs, qspec, intake] = await Promise.all([
+    const [meta, weeks, sessions, tests, zones, logs, qspec, intake, messages] = await Promise.all([
       SB.from("plan_meta").select("*").maybeSingle(),
       SB.from("plan_week").select("*").order("monday"),
       SB.from("plan_session").select("*").order("on_date"),
@@ -629,11 +724,13 @@
       SB.from("log").select("*"),
       SB.from("question_spec").select("spec").maybeSingle(),
       SB.from("intake_response").select("payload").maybeSingle(),
+      SB.from("message").select("id,kind,body,created_at,read_at").eq("direction", "out").order("created_at", { ascending: false }),
     ]);
     const zmap = {}; (zones.data || []).forEach((z) => { zmap[z.key] = z; });
     const p = { meta: meta.data, weeks: weeks.data || [], sessions: sessions.data || [], tests: tests.data || [],
                 zones: zmap, questionSpec: (qspec.data && qspec.data.spec) || null,
                 intake: (intake.data && intake.data.payload) || null };
+    S.messages = messages.data || [];
     applyPlan(p);
     S.logs = {}; (logs.data || []).forEach((r) => { S.logs[`${r.on_date}|${r.session_key}`] = r; });
     await idbSet("cache", "plan", p);
