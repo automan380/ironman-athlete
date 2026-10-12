@@ -6,7 +6,7 @@
 (function () {
   "use strict";
 
-  const APP_VERSION = "2.1.0";          // shown in the settings menu; keep in step with CHANGELOG.md
+  const APP_VERSION = "2.2.0";          // shown in the settings menu; keep in step with CHANGELOG.md
   const CFG = window.IRONMAN_CONFIG || {};
   // "Remember me on this device": when on, the session lives in localStorage and survives app
   // restarts; when off, it lives in sessionStorage and is gone once the app is closed. The backend
@@ -30,6 +30,15 @@
       no_zones: "No test results yet — your zones will appear here once your coach records a test.",
       threshold: "threshold", quest_soon: "You'll fill in your questionnaires here — coming soon.",
       m_hr: "Heart rate", m_power: "Power", m_pace: "Pace",
+      quest_loading: "Loading your questionnaire…",
+      quest_intro: "Fill this in so your coach can build your plan. You can stop and come back — your answers are saved on this device.",
+      quest_review: "Review your answers", review_btn: "Review", send_to_coach: "Send to coach",
+      back_edit: "Back to edit", edit_answers: "Edit answers", sending: "Sending…",
+      quest_sent: "Sent. Your coach will build your plan — it'll appear under Plan.",
+      quest_done: "You've completed your questionnaire. Your coach built your plan — see Plan.",
+      quest_offline_fill: "You're offline — your answers are saved. Connect to send them.",
+      quest_answer: "Please answer: {q}", coach_only: "For your coach — not used to build the plan",
+      yes: "Yes", no: "No", unanswered: "—",
       theme: "Theme", theme_auto: "Auto", theme_light: "Light", theme_dark: "Dark", language: "Language",
       account: "Account", signed_in_as: "Signed in as", sync_now: "Sync now", syncing: "Syncing…",
       change_pw: "Change password", new_pw_ph: "New password", save_pw: "Save password",
@@ -74,6 +83,15 @@
       no_zones: "Nessun test ancora — le tue zone compariranno qui dopo che il coach registra un test.",
       threshold: "soglia", quest_soon: "Qui compilerai i tuoi questionari — disponibile a breve.",
       m_hr: "Frequenza cardiaca", m_power: "Potenza", m_pace: "Passo",
+      quest_loading: "Carico il tuo questionario…",
+      quest_intro: "Compila così il coach può costruire il tuo piano. Puoi fermarti e riprendere — le risposte restano salvate su questo dispositivo.",
+      quest_review: "Rivedi le risposte", review_btn: "Rivedi", send_to_coach: "Invia al coach",
+      back_edit: "Torna a modificare", edit_answers: "Modifica le risposte", sending: "Invio…",
+      quest_sent: "Inviato. Il coach costruirà il tuo piano — comparirà in Piano.",
+      quest_done: "Hai completato il questionario. Il coach ha costruito il tuo piano — vedi Piano.",
+      quest_offline_fill: "Sei offline — le risposte sono salvate. Collegati per inviarle.",
+      quest_answer: "Rispondi a: {q}", coach_only: "Per il coach — non usato per costruire il piano",
+      yes: "Sì", no: "No", unanswered: "—",
       theme: "Tema", theme_auto: "Auto", theme_light: "Chiaro", theme_dark: "Scuro", language: "Lingua",
       account: "Account", signed_in_as: "Connesso come", sync_now: "Sincronizza ora", syncing: "Sincronizzo…",
       change_pw: "Cambia password", new_pw_ph: "Nuova password", save_pw: "Salva password",
@@ -206,6 +224,7 @@
     weeks: [], sessions: [], tests: [], zones: {},
     logs: {}, outbox: {},
     fieldSpec: {}, weekIdx: null, section: "plan", view: "week", current: null,
+    questionSpec: null, intakeResponse: null, intakeDraft: {}, intakeStep: "form", navChosen: false,
   };
   const lkey = (s) => `${s.on_date}|${s.session_key}`;
 
@@ -237,7 +256,7 @@
   }
   function openDrawer() { renderDrawer(); $("#drawer").hidden = false; $("#backdrop").hidden = false; }
   function closeDrawer() { const d = $("#drawer"); if (d) d.hidden = true; const bd = $("#backdrop"); if (bd) bd.hidden = true; }
-  function go(section) { S.section = section; S.current = null; closeDrawer(); renderSection(); scrollTop(); }
+  function go(section) { S.navChosen = true; S.section = section; S.current = null; closeDrawer(); renderSection(); scrollTop(); }
 
   function renderSection() {
     if (S.section === "plan") { if (S.current) renderSession(S.current); else renderWeek(); return; }
@@ -318,9 +337,156 @@
     $("#syncnow").addEventListener("click", syncNow);
   }
 
-  // ---------- Questionnaires page (placeholder until iteration 2) ----------
+  // ---------- Questionnaires page (initial intake) ----------
+  const DAY_IDX = ["0", "1", "2", "3", "4", "5", "6"];
+  function intakeInputHtml(q) {
+    const v = S.intakeDraft[q.name], id = "qf_" + q.name;
+    if (q.kind === "days") {
+      const sel = String(v || "").split(",").filter(Boolean), wd = cal().WD;
+      return `<div class="daysrow">` + DAY_IDX.map((d, i) =>
+        `<label class="daybox"><input type="checkbox" name="qd_${esc(q.name)}" value="${d}" ${sel.indexOf(d) >= 0 ? "checked" : ""}> ${esc(wd[i])}</label>`).join("") + `</div>`;
+    }
+    if (q.kind === "yesno") {
+      return `<select id="${id}" name="${id}">` +
+        [["", "—"], ["yes", T("yes")], ["no", T("no")]].map(([ov, ol]) =>
+          `<option value="${ov}" ${String(v || "") === ov ? "selected" : ""}>${esc(ol)}</option>`).join("") + `</select>`;
+    }
+    if (q.kind === "choice") {
+      const opts = (q.options || []).map(([ov, ol]) =>
+        `<option value="${esc(ov)}" ${String(v || "") === String(ov) ? "selected" : ""}>${esc(ol)}</option>`).join("");
+      return `<select id="${id}" name="${id}"><option value=""></option>${opts}</select>`;
+    }
+    if (q.kind === "date") return `<input id="${id}" name="${id}" type="date" value="${esc(v || "")}">`;
+    if (q.kind === "number") {
+      const inp = `<input id="${id}" name="${id}" type="number" inputmode="decimal" step="any" value="${esc(v || "")}">`;
+      return q.unit ? `<div class="row2">${inp}<span class="unitlabel">${esc(q.unit)}</span></div>` : inp;
+    }
+    if ((q.lines || 1) > 1) return `<textarea id="${id}" name="${id}" rows="${q.lines}">${esc(v || "")}</textarea>`;
+    return `<input id="${id}" name="${id}" type="text" value="${esc(v || "")}">`;
+  }
+
+  function saveIntakeDraftFromDom() {
+    const d = {};
+    (S.questionSpec || []).forEach((sec) => sec.questions.forEach((q) => {
+      if (q.kind === "days") {
+        d[q.name] = [...app.querySelectorAll(`[name="qd_${q.name}"]:checked`)].map((c) => c.value).join(",");
+      } else {
+        const el = document.getElementById("qf_" + q.name);
+        if (el) d[q.name] = el.value;
+      }
+    }));
+    S.intakeDraft = d; idbSet("cache", "intake_draft", d);
+  }
+  function firstUnanswered() {
+    for (const sec of (S.questionSpec || [])) for (const q of sec.questions) {
+      if (q.optional) continue;
+      const v = S.intakeDraft[q.name];
+      if (q.kind === "yesno") { if (v !== "yes" && v !== "no") return q.prompt; }
+      else if (!String(v == null ? "" : v).trim()) return q.prompt;
+    }
+    return null;
+  }
+  function buildIntakePayload() {
+    const out = {};
+    (S.questionSpec || []).forEach((sec) => sec.questions.forEach((q) => {
+      const v = S.intakeDraft[q.name];
+      if (q.kind === "days") { if (v && String(v).trim()) out["available_days"] = String(v).trim(); return; }
+      if (q.kind === "yesno") { if (v === "yes") out[q.name] = "1"; return; }   // omit if "no" (coach reads it as a checkbox)
+      if (v == null || String(v).trim() === "") return;
+      out[q.name] = String(v).trim();
+    }));
+    return out;
+  }
+  function seedDraftFromResponse() {
+    if (Object.keys(S.intakeDraft || {}).length) return;
+    const p = S.intakeResponse || {}, d = {};
+    (S.questionSpec || []).forEach((sec) => sec.questions.forEach((q) => {
+      if (q.kind === "days") d[q.name] = p["available_days"] || "";
+      else if (q.kind === "yesno") d[q.name] = p[q.name] ? "yes" : "no";
+      else d[q.name] = (p[q.name] != null) ? String(p[q.name]) : "";
+    }));
+    S.intakeDraft = d;
+  }
+  function answerDisplay(q, src, fromDraft) {
+    if (q.kind === "days") {
+      const raw = fromDraft ? src[q.name] : src["available_days"], wd = cal().WD;
+      return String(raw || "").split(",").filter(Boolean).map((i) => wd[+i]).join(", ");
+    }
+    if (q.kind === "yesno") return (fromDraft ? src[q.name] === "yes" : !!src[q.name]) ? T("yes")
+      : (fromDraft && src[q.name] !== "no") ? "" : T("no");
+    const v = src[q.name];
+    if (q.kind === "choice") { const o = (q.options || []).find((o) => String(o[0]) === String(v)); return o ? o[1] : (v || ""); }
+    return v == null ? "" : String(v);
+  }
+  function readonlyAnswersHtml(fromDraft) {
+    const spec = S.questionSpec; if (!spec) return "";
+    const src = fromDraft ? S.intakeDraft : (S.intakeResponse || {});
+    return spec.map((sec) => {
+      const rows = sec.questions.map((q) =>
+        `<tr><th>${esc(q.prompt)}</th><td>${esc(answerDisplay(q, src, fromDraft) || T("unanswered"))}</td></tr>`).join("");
+      return `<div class="card"><div class="sectiontitle">${esc(sec.title)}</div><table class="answers"><tbody>${rows}</tbody></table></div>`;
+    }).join("");
+  }
+
+  async function sendIntake() {
+    const m = $("#qmsg");
+    if (!navigator.onLine) { m.hidden = false; m.className = "msg err"; m.textContent = T("quest_offline_fill"); return; }
+    const btn = $("#qsend"); btn.disabled = true; const t = btn.textContent; btn.textContent = T("sending");
+    const payload = buildIntakePayload();
+    const rec = { athlete_id: S.athleteId, payload, device_id: deviceId(), client_updated_at: new Date().toISOString() };
+    try {
+      const { error } = await SB.from("intake_response").upsert(rec, { onConflict: "athlete_id" });
+      if (error) throw error;
+      S.intakeResponse = payload; S.intakeStep = "form"; S.intakeDraft = {};
+      try { await idbDel("cache", "intake_draft"); } catch (e) { /* ignore */ }
+      renderQuestionnaires(); scrollTop();
+    } catch (e) {
+      m.hidden = false; m.className = "msg err"; m.textContent = T("error") + ((e && e.message) || e);
+      btn.disabled = false; btn.textContent = t;
+    }
+  }
+
+  function renderIntakeReview() {
+    app.innerHTML = `<h2 class="pagetitle">${T("quest_review")}</h2>` + readonlyAnswersHtml(true) +
+      `<div id="qmsg" class="msg err" hidden></div>` +
+      `<div class="actions"><button id="qsend" class="primary">${T("send_to_coach")}</button>` +
+      `<button id="qback" class="ghost">${T("back_edit")}</button></div>`;
+    $("#qback").addEventListener("click", () => { S.intakeStep = S.intakeResponse ? "edit" : "form"; renderQuestionnaires(); });
+    $("#qsend").addEventListener("click", sendIntake);
+  }
+
   function renderQuestionnaires() {
-    app.innerHTML = `<h2 class="pagetitle">${T("nav_quest")}</h2><div class="card"><p class="muted">${T("quest_soon")}</p></div>`;
+    const title = `<h2 class="pagetitle">${T("nav_quest")}</h2>`;
+    if (S.weeks.length) { app.innerHTML = title + `<div class="card"><p class="muted">${T("quest_done")}</p></div>` + readonlyAnswersHtml(false); return; }
+    if (!S.questionSpec) { app.innerHTML = title + `<div class="card"><p class="muted">${T(navigator.onLine ? "quest_loading" : "quest_offline_fill")}</p></div>`; return; }
+    if (S.intakeResponse && S.intakeStep !== "edit") {
+      app.innerHTML = title + `<div class="card"><p>${T("quest_sent")}</p><button id="editq" class="ghost">${T("edit_answers")}</button></div>` + readonlyAnswersHtml(false);
+      const b = $("#editq"); if (b) b.addEventListener("click", () => { seedDraftFromResponse(); S.intakeStep = "edit"; renderQuestionnaires(); });
+      return;
+    }
+    if (S.intakeStep === "review") { renderIntakeReview(); return; }
+    let html = title + `<p class="muted small">${T("quest_intro")}</p>`;
+    S.questionSpec.forEach((sec) => {
+      html += `<div class="card"><div class="sectiontitle">${esc(sec.title)}</div>`;
+      if (sec.blurb) html += `<p class="note">${esc(sec.blurb)}</p>`;
+      sec.questions.forEach((q) => {
+        const req = q.optional ? "" : ` <span class="req">*</span>`;
+        const unit = (q.unit && q.kind !== "number") ? ` <span class="muted">(${esc(q.unit)})</span>` : "";
+        const help = q.help ? `<div class="help">${esc(q.help)}</div>` : "";
+        const coach = !q.drives ? `<div class="help"><em>${T("coach_only")}</em></div>` : "";
+        html += `<div class="field"><label>${esc(q.prompt)}${unit}${req}</label>${intakeInputHtml(q)}${help}${coach}</div>`;
+      });
+      html += `</div>`;
+    });
+    html += `<div id="qmsg" class="msg err" hidden></div><div class="actions"><button id="qreview" class="primary">${T("review_btn")}</button></div>`;
+    app.innerHTML = html;
+    app.querySelectorAll("input,select,textarea").forEach((el) => el.addEventListener("change", saveIntakeDraftFromDom));
+    $("#qreview").addEventListener("click", () => {
+      saveIntakeDraftFromDom();
+      const missing = firstUnanswered(), m = $("#qmsg");
+      if (missing) { m.hidden = false; m.className = "msg err"; m.textContent = T("quest_answer", { q: missing }); scrollTop(); return; }
+      S.intakeStep = "review"; renderQuestionnaires(); scrollTop();
+    });
   }
 
   async function syncNow() {
@@ -405,13 +571,18 @@
     }
     if (!S.weeks.length) await loadCache();
     if (S.weekIdx == null) S.weekIdx = currentWeekIdx();
+    gateSection();
     renderSection();
     if (navigator.onLine) {
-      try { await refresh(); if (S.weekIdx == null) S.weekIdx = currentWeekIdx(); repaint(); } catch (e) { console.warn("refresh failed", e); }
+      try { await refresh(); if (S.weekIdx == null) S.weekIdx = currentWeekIdx(); gateSection(); renderSection(); } catch (e) { console.warn("refresh failed", e); }
       flushOutbox().then(repaint);
     }
     setSync();
   }
+
+  // The home follows whether a plan exists — questionnaire when there's none, Plan once there is —
+  // until the athlete picks a section from the menu, after which their choice is respected.
+  function gateSection() { if (!S.navChosen) S.section = S.weeks.length ? "plan" : "questionnaires"; }
 
   // Re-render only the data-driven sections after a sync, so a background refresh never clobbers a
   // form the athlete is filling in (Account password, Settings).
@@ -434,6 +605,7 @@
     const p = await idbGet("cache", "plan");
     if (p) applyPlan(p);
     const logs = await idbGet("cache", "logs"); if (logs) S.logs = logs;
+    const draft = await idbGet("cache", "intake_draft"); if (draft) S.intakeDraft = draft;
     await loadOutbox();
   }
   function applyPlan(p) {
@@ -443,19 +615,25 @@
     S.sessions = p.sessions || [];
     S.tests = p.tests || [];
     S.zones = p.zones || {};
+    S.questionSpec = p.questionSpec || S.questionSpec || null;
+    S.intakeResponse = ("intake" in p) ? p.intake : S.intakeResponse;
     S.fieldSpec = {}; ((S.meta && S.meta.field_spec) || []).forEach((f) => { S.fieldSpec[f.name] = f; });
   }
   async function refresh() {
-    const [meta, weeks, sessions, tests, zones, logs] = await Promise.all([
+    const [meta, weeks, sessions, tests, zones, logs, qspec, intake] = await Promise.all([
       SB.from("plan_meta").select("*").maybeSingle(),
       SB.from("plan_week").select("*").order("monday"),
       SB.from("plan_session").select("*").order("on_date"),
       SB.from("plan_test").select("*").order("on_date"),
       SB.from("zone_sheet").select("*"),
       SB.from("log").select("*"),
+      SB.from("question_spec").select("spec").maybeSingle(),
+      SB.from("intake_response").select("payload").maybeSingle(),
     ]);
     const zmap = {}; (zones.data || []).forEach((z) => { zmap[z.key] = z; });
-    const p = { meta: meta.data, weeks: weeks.data || [], sessions: sessions.data || [], tests: tests.data || [], zones: zmap };
+    const p = { meta: meta.data, weeks: weeks.data || [], sessions: sessions.data || [], tests: tests.data || [],
+                zones: zmap, questionSpec: (qspec.data && qspec.data.spec) || null,
+                intake: (intake.data && intake.data.payload) || null };
     applyPlan(p);
     S.logs = {}; (logs.data || []).forEach((r) => { S.logs[`${r.on_date}|${r.session_key}`] = r; });
     await idbSet("cache", "plan", p);

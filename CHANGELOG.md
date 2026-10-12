@@ -3,6 +3,11 @@
 All notable changes to the athlete app. The version here matches `APP_VERSION` in `app.js`
 (shown in the in-app settings menu). Dates are YYYY-MM-DD.
 
+## 2.2.0 — 2026-10-12
+- **Fill in your questionnaire in the app.** A new athlete with no plan yet lands on **Questionnaires** and answers the intake questions (who you are, your week, current ability, targets, experience, equipment, health, the race) right on the phone. Fill it in over time — your answers are saved on the device — then **Review** and **Send to coach**. Your coach's app builds and publishes your plan automatically, and it appears under **Plan**.
+- Once the plan is built, the questionnaire is shown read-only (your submitted answers).
+- Service-worker cache bumped to `v7`.
+
 ## 2.1.0 — 2026-10-12
 - **App renamed to "Ironman Planner"** in the top bar (was "Training"), matching the coach web app.
 - **Side menu** (tap the ☰): **Questionnaires · Plan · Zones · Account · Settings**. The gear is gone.
