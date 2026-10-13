@@ -156,6 +156,17 @@ button:disabled { opacity: .55; }
 .chip.pend { background: color-mix(in srgb, var(--warn) 22%, transparent); color: var(--warn); }
 .chevron { color: var(--muted); flex: none; }
 
+/* A test day: the result-entry card leads (accent), the "just log it" card sits quietly below. */
+.sess.testcta { background: color-mix(in srgb, var(--accent) 8%, transparent); border-left: 3px solid var(--accent); }
+.sess.testcta .sub { color: var(--accent); font-weight: 700; }
+.sess.testlog { opacity: .85; }
+.sess.testlog .sub { font-style: italic; }
+/* On a test session's detail page, the lead button to its own result form. */
+.gototest { display: block; width: 100%; margin: .6rem 0; font: inherit; font-weight: 700;
+            background: var(--accent); color: var(--accent-fg); border: none; border-radius: 8px;
+            padding: .7rem .8rem; text-align: left; cursor: pointer; }
+.gototest:active { filter: brightness(.95); }
+
 /* Weekly totals (plan / done per sport) — mirrors the coach calendar's Totals column */
 .weektotals { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
 .weektotals > .tothead { padding: .5rem .8rem; font-weight: 700; background: var(--surface2); border-bottom: 1px solid var(--line); }

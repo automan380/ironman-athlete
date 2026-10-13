@@ -3,6 +3,15 @@
 All notable changes to the athlete app. The version here matches `APP_VERSION` in `app.js`
 (shown in the in-app settings menu). Dates are YYYY-MM-DD.
 
+## 2.6.0 — 2026-10-13
+- **Entering a test result is now the obvious thing to tap.** A test day used to show two near-identical
+  cards — the one that recorded your 400/200 times looked *less* tappable than the one that only logged
+  minutes and how it felt, so it was easy to open the wrong one. Now the test day leads with a clear
+  **"Enter your test result"** button (which opens the right boxes — e.g. the 400 m and 200 m times),
+  and the plain "log how the session went" card sits quietly underneath.
+- If you do open the session card for a test, a button at the top takes you straight to the result form.
+- No change to what you enter or how it is sent — only how you reach it. Service-worker cache bumped to `v13`.
+
 ## 2.5.0 — 2026-10-13
 - **New "Moving workouts" page** in the side menu, under Zones. It is your coach's guide to training
   around an airline roster — *Training around the roster* — formatted to read on your phone: when a

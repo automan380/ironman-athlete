@@ -6,7 +6,7 @@
 (function () {
   "use strict";
 
-  const APP_VERSION = "2.5.0";          // shown in the settings menu; keep in step with CHANGELOG.md
+  const APP_VERSION = "2.6.0";          // shown in the settings menu; keep in step with CHANGELOG.md
   let pendingReload = false;            // set when the athlete taps "update"; drives the one reload below
   const CFG = window.IRONMAN_CONFIG || {};
   // "Remember me on this device": when on, the session lives in localStorage and survives app
@@ -80,6 +80,9 @@
       multi: "Above 60 g/h you need a glucose + fructose mix: a single sugar cannot be absorbed fast enough.",
       warm_up: "Warm-up", how: "How to do it", measures: "What it measures",
       test_coach: "Record the test result with your coach.",
+      test_cta: "Enter your test result",
+      test_log_opt: "Log the session (minutes, how it felt)",
+      test_from_session: "This is a test — enter your result (the numbers your coach needs)",
       test_enter: "Enter your result", test_submit: "Send to coach", test_update: "Update result",
       test_submitting: "Sending…",
       test_sent: "Sent. Your coach will review and approve it — your zones update once they do.",
@@ -150,6 +153,9 @@
       multi: "Sopra i 60 g/h serve un mix glucosio + fruttosio: uno zucchero solo non si assorbe abbastanza in fretta.",
       warm_up: "Riscaldamento", how: "Come si fa", measures: "Cosa misura",
       test_coach: "Registra il risultato del test con il coach.",
+      test_cta: "Inserisci il risultato del test",
+      test_log_opt: "Registra la sessione (minuti, com'è andata)",
+      test_from_session: "Questo è un test — inserisci il risultato (i numeri che servono al coach)",
       test_enter: "Inserisci il risultato", test_submit: "Invia al coach", test_update: "Aggiorna il risultato",
       test_submitting: "Invio…",
       test_sent: "Inviato. Il coach lo esaminerà e approverà — le zone si aggiornano quando lo fa.",
@@ -1181,10 +1187,21 @@
       if (!sess.length && !tsts.length) {
         html += `<div class="rest">${T("rest")}</div>`;
       } else {
+        // The test's OWN result entry (e.g. the 400 m and 200 m times) is the primary action on a
+        // test day: a prominent button at the top that opens the result form.
         tsts.forEach((ts) => {
-          html += `<div class="sess" data-test="${esc(iso)}|${esc(ts.protocol)}"><div class="body"><div class="t">${T("test_prefix")}${esc(ts.name || ts.protocol)} <span class="badge test">${T("badge_test")}</span></div><div class="sub">${esc(ts.sport || "")}</div></div></div>`;
+          html += `<button class="sess testcta" data-test="${esc(iso)}|${esc(ts.protocol)}">
+            <div class="body"><div class="t">${T("test_prefix")}${esc(ts.name || ts.protocol)} <span class="badge test">${T("badge_test")}</span></div>
+            <div class="sub">${T("test_cta")} · ${esc(ts.sport || "")}</div></div>
+            <span class="chevron">›</span></button>`;
         });
+        // A scheduled test is ALSO a loggable "TEST: …" session. When its result entry is shown
+        // above, demote that session to a quiet "log how it went" link so the result stays the
+        // obvious thing to tap; keep it a normal tile if there is no matching test to record.
+        const demoted = [];
         sess.forEach((s) => {
+          const isTestSess = (s.is_test || /^TEST\b/i.test(s.title || "")) && tsts.some((x) => x.sport === s.sport);
+          if (isTestSess) { demoted.push(s); return; }
           const st = logState(s);
           let chip = "";
           if (st) chip = st.pending ? `<span class="chip pend">${T("queued")}</span>`
@@ -1194,6 +1211,13 @@
             <div class="body"><div class="t">${esc(s.title)}${s.is_bt ? ` <span class="badge bt">${T("badge_key")}</span>` : ""}</div>
             <div class="sub">${hhmm(s.minutes)} · ${esc(s.sport)}${zone}</div></div>
             ${chip}<span class="chevron">›</span></button>`;
+        });
+        demoted.forEach((s) => {
+          const st = logState(s);
+          const chipTxt = st ? (st.pending ? T("queued") : st.done ? T("logged") : T("skipped")) : "";
+          html += `<button class="sess testlog" data-key="${esc(iso)}|${esc(s.session_key)}">
+            <div class="body"><div class="sub">${T("test_log_opt")}${chipTxt ? " · " + esc(chipTxt) : ""}</div></div>
+            <span class="chevron">›</span></button>`;
         });
       }
       html += `</div>`;
@@ -1261,10 +1285,15 @@
   function renderSession(s) {
     S.view = "session"; S.current = s; $("#back").hidden = false;
     const zone = s.zone && s.zone !== "-" ? ` · Z${esc(s.zone)}` : "";
+    // A "TEST: …" session carries its own result form (e.g. the 400 m and 200 m times) as a
+    // separate test. Surface it as the lead action so the athlete enters the measurement the coach
+    // needs, not just a generic minutes/RPE log.
+    const testFor = s.is_test ? S.tests.find((x) => x.on_date === s.on_date && x.sport === s.sport) : null;
     let html = `<div class="detail">
       <div class="muted small">${longDay(s.on_date)}</div>
       <h1>${esc(s.title)}${s.is_bt ? ` <span class="badge bt">${T("badge_key")}</span>` : ""}${s.is_test ? ` <span class="badge test">${T("badge_test")}</span>` : ""}</h1>
       <div class="kv">${hhmm(s.minutes)} · ${esc(s.sport)}${zone}</div>`;
+    if (testFor) html += `<button type="button" id="gototest" class="gototest">${T("test_from_session")} ›</button>`;
     html += targetHtml(s.target);
     if (s.detail && s.detail.length) html += `<div class="sectiontitle">${T("detail")}</div><ul class="lines">${s.detail.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>`;
     html += fuelHtml(s.fuel, s.sport, s.minutes);
@@ -1272,6 +1301,8 @@
     html += logSectionHtml(s);
     html += `</div>`;
     app.innerHTML = html;
+    const gt = $("#gototest");
+    if (gt && testFor) gt.addEventListener("click", () => renderTest(testFor));
     scrollTop();
     wireLogForm(s);
   }
