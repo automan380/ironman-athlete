@@ -3,6 +3,16 @@
 All notable changes to the athlete app. The version here matches `APP_VERSION` in `app.js`
 (shown in the in-app settings menu). Dates are YYYY-MM-DD.
 
+## 2.6.1 — 2026-10-13
+- **No more false error when you send a test result.** On iPhone the app could show an error after
+  "Send to Coach" even though the result had actually reached your coach. Now, if the send looks like
+  it failed, the app checks whether it really landed and shows "sent" when it did — only a genuine
+  failure shows an error.
+- **You can type the ":" in a time.** The time boxes (e.g. the 400 m / 200 m swim times) now open the
+  full keyboard, so you can enter `6:40` directly; before, iPhone showed a digits-only pad with no
+  colon.
+- Service-worker cache bumped to `v14`.
+
 ## 2.6.0 — 2026-10-13
 - **Entering a test result is now the obvious thing to tap.** A test day used to show two near-identical
   cards — the one that recorded your 400/200 times looked *less* tappable than the one that only logged

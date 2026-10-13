@@ -6,7 +6,7 @@
 (function () {
   "use strict";
 
-  const APP_VERSION = "2.6.0";          // shown in the settings menu; keep in step with CHANGELOG.md
+  const APP_VERSION = "2.6.1";          // shown in the settings menu; keep in step with CHANGELOG.md
   let pendingReload = false;            // set when the athlete taps "update"; drives the one reload below
   const CFG = window.IRONMAN_CONFIG || {};
   // "Remember me on this device": when on, the session lives in localStorage and survives app
@@ -1316,7 +1316,10 @@
     const lab = `<label for="tf_${esc(f.name)}">${esc(f.label)}${req}</label>`;
     let control;
     if (f.kind === "time") {
-      control = `<input id="tf_${esc(f.name)}" name="${esc(f.name)}" type="text" inputmode="numeric"
+      // Full keyboard (no inputmode) so iOS exposes the ":" key for mm:ss; the digits-only "numeric"
+      // keypad hid it. The submit-time regex still enforces the mm:ss / h:mm:ss shape.
+      control = `<input id="tf_${esc(f.name)}" name="${esc(f.name)}" type="text"
+                 autocapitalize="off" autocorrect="off" spellcheck="false"
                  placeholder="${esc(f.placeholder || T("mmss"))}" value="${esc(val)}">`;
     } else if (f.unit_kind) {
       const swim = f.unit_kind === "short";
@@ -1393,21 +1396,41 @@
       m.hidden = false; m.className = "msg err"; m.textContent = T("test_offline"); return;
     }
     const btn = $("#testsend"); btn.disabled = true; const t = btn.textContent; btn.textContent = T("test_submitting");
+    const stamp = new Date().toISOString();
     const row = {
       athlete_id: S.athleteId, protocol: ts.protocol, on_date: ts.on_date,
       fields, conditions, indoor, device_id: deviceId(),
-      client_updated_at: new Date().toISOString(),
+      client_updated_at: stamp,
       ingested_at: null,            // (re)submitting makes the coach pull it again
+    };
+    // Shows the "sent" state once we KNOW the row landed. Mobile Safari sometimes reports a network
+    // error on the RESPONSE even though the write committed, which used to surface a scary error over
+    // a submission that actually reached the coach.
+    const markSent = () => {
+      S.submissions[`${ts.protocol}|${ts.on_date}`] = { protocol: ts.protocol, on_date: ts.on_date, fields, ingested_at: null };
+      m.hidden = false; m.className = "msg info"; m.textContent = T("test_sent");
+      btn.textContent = T("test_update");
     };
     try {
       const { error } = await SB.from("test_submission").upsert(row, { onConflict: "athlete_id,protocol,on_date" });
       if (error) throw error;
-      S.submissions[`${ts.protocol}|${ts.on_date}`] = { protocol: ts.protocol, on_date: ts.on_date, fields, ingested_at: null };
-      m.hidden = false; m.className = "msg info"; m.textContent = T("test_sent");
-      btn.textContent = T("test_update");
+      markSent();
     } catch (e) {
-      m.hidden = false; m.className = "msg err"; m.textContent = T("error") + ((e && e.message) || e);
-      btn.textContent = t;
+      console.warn("test submit:", e);
+      // Did our write land despite the error? Read the submission back and compare OUR stamp (a
+      // different/old row must NOT count as success). Timestamps compared as instants: Postgres
+      // returns "+00:00" where we sent "Z".
+      let landed = false;
+      try {
+        const { data: back } = await SB.from("test_submission")
+          .select("client_updated_at")
+          .eq("athlete_id", S.athleteId).eq("protocol", ts.protocol).eq("on_date", ts.on_date)
+          .maybeSingle();
+        landed = !!(back && back.client_updated_at &&
+                    new Date(back.client_updated_at).getTime() === new Date(stamp).getTime());
+      } catch (e2) { console.warn("test submit read-back:", e2); }
+      if (landed) { markSent(); }
+      else { m.hidden = false; m.className = "msg err"; m.textContent = T("error") + ((e && e.message) || e); btn.textContent = t; }
     } finally { btn.disabled = false; }
   }
 
