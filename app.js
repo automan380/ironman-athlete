@@ -6,7 +6,7 @@
 (function () {
   "use strict";
 
-  const APP_VERSION = "2.4.0";          // shown in the settings menu; keep in step with CHANGELOG.md
+  const APP_VERSION = "2.5.0";          // shown in the settings menu; keep in step with CHANGELOG.md
   let pendingReload = false;            // set when the athlete taps "update"; drives the one reload below
   const CFG = window.IRONMAN_CONFIG || {};
   // "Remember me on this device": when on, the session lives in localStorage and survives app
@@ -27,7 +27,7 @@
   const STR = {
     en: {
       brand: "Ironman Planner", signout: "Sign out", back: "Back", settings: "Settings", menu: "Menu",
-      nav_quest: "Questionnaires", nav_plan: "Plan", nav_zones: "Zones", nav_account: "Account", nav_settings: "Settings",
+      nav_quest: "Questionnaires", nav_plan: "Plan", nav_zones: "Zones", nav_moving: "Moving workouts", nav_account: "Account", nav_settings: "Settings",
       no_zones: "No test results yet — your zones will appear here once your coach records a test.",
       threshold: "threshold", quest_soon: "You'll fill in your questionnaires here — coming soon.",
       m_hr: "Heart rate", m_power: "Power", m_pace: "Pace",
@@ -97,7 +97,7 @@
     },
     it: {
       brand: "Ironman Planner", signout: "Esci", back: "Indietro", settings: "Impostazioni", menu: "Menu",
-      nav_quest: "Questionari", nav_plan: "Piano", nav_zones: "Zone", nav_account: "Account", nav_settings: "Impostazioni",
+      nav_quest: "Questionari", nav_plan: "Piano", nav_zones: "Zone", nav_moving: "Spostare gli allenamenti", nav_account: "Account", nav_settings: "Impostazioni",
       no_zones: "Nessun test ancora — le tue zone compariranno qui dopo che il coach registra un test.",
       threshold: "soglia", quest_soon: "Qui compilerai i tuoi questionari — disponibile a breve.",
       m_hr: "Frequenza cardiaca", m_power: "Potenza", m_pace: "Passo",
@@ -282,7 +282,7 @@
   }
   // ---------- side menu (drawer) + section navigation ----------
   const NAV = [["questionnaires", "nav_quest"], ["plan", "nav_plan"], ["zones", "nav_zones"],
-               ["account", "nav_account"], ["settings", "nav_settings"]];
+               ["moving", "nav_moving"], ["account", "nav_account"], ["settings", "nav_settings"]];
   function renderDrawer() {
     const d = $("#drawer");
     d.innerHTML = NAV.map(([k, lbl]) =>
@@ -298,6 +298,7 @@
     if (S.section === "plan") { if (S.current) renderSession(S.current); else renderWeek(); return; }
     $("#back").hidden = true;
     if (S.section === "zones") renderZones();
+    else if (S.section === "moving") renderMoving();
     else if (S.section === "account") renderAccount();
     else if (S.section === "settings") renderSettingsPage();
     else if (S.section === "questionnaires") renderQuestionnaires();
@@ -332,6 +333,231 @@
         `</table></div>`;
     });
     app.innerHTML = html;
+  }
+
+  // ---------- Moving workouts page (Training around the roster) ----------
+  function renderMoving() {
+    app.innerHTML = `
+    <h2 class="pagetitle">${T("nav_moving")}</h2>
+    <div class="doc">
+
+      <div class="card lead">
+        <p><strong>Who this is for.</strong> Pilots and cabin crew training for an Ironman. Your
+        working month is built by somebody else, it changes at short notice, and it moves you
+        through five time zones in a week. Everything below is written for that.</p>
+        <p><strong>The one sentence that matters.</strong> The plan is a shape, not a timetable.
+        The roster comes first and the plan bends around it — as long as you know which parts bend
+        and which do not.</p>
+        <p class="note">Where these rules come from: they are your coach's, from ten years of
+        training for Ironman while flying the line. Where a rule comes from one of the two books
+        the plan is built on, or a number the app works out for you, it says so.</p>
+      </div>
+
+      <div class="card">
+        <h3>Rule number one: a missed session is gone</h3>
+        <p><strong>If you miss a session, do not try to make it up the following week.</strong>
+        Let it go. Cross it off, tell me, and do next week exactly as it is written.</p>
+        <p>This is the rule that gets broken most, and the one that does the most damage. The week
+        ahead already has its own work in it, built on the assumption that last week happened.
+        Putting a missed long run on top of it gives you a week harder than anything in the plan —
+        at the exact moment you are tired, behind and feeling guilty. That is how a missed session
+        turns into an injury, and an injury into a month.</p>
+        <p>Missing one session costs you almost nothing — Ironman fitness is built over months, not
+        weeks. Two sessions crammed into one week costs you a great deal.
+        <strong>Never trade a cheap loss for an expensive one.</strong></p>
+        <p>If you have missed a lot — a whole week, or most of one — do not try to fix it yourself.
+        Tell me and I will rebuild the plan from where you actually are.</p>
+      </div>
+
+      <div class="card">
+        <h3>Start with the roster, not with the plan</h3>
+        <ul>
+          <li><strong>Lay the month out side by side.</strong> Put your roster next to the plan and
+          mark every day with what is actually possible. Do the whole month in one sitting — ten
+          minutes once beats a decision every morning.</li>
+          <li><strong>Know what each layover gives you.</strong> Keep your own list and add to it.
+          Mine started like this:</li>
+        </ul>
+        <table class="movetable">
+          <tr><th>Layover</th><th>Pool</th><th>Bike</th><th>Run</th><th>Gym</th></tr>
+          <tr><td>SFO</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+          <tr><td>LAX</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+          <tr><td>JNB</td><td class="y">✓</td><td class="n">—</td><td class="y">✓</td><td class="y">✓</td></tr>
+          <tr><td>MIA</td><td class="n">—</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+        </table>
+        <p class="note">A hotel with no pool is not a problem if you know before you pack. It is a
+        problem if you find out at midnight with a swim on the plan.</p>
+        <ul>
+          <li><strong>Place the long sessions first.</strong> Put the long ride, the long run and
+          the brick on the days you know you are home and clear, then fill everything else around
+          them. They are the hardest to fit and the ones you cannot lose.</li>
+          <li><strong>A standby day is a day you may lose.</strong> If you train on it, train early.</li>
+          <li><strong>Tell me when the roster changes shape</strong>, not after the week has gone.
+          Which days you can train on is one of the answers your plan is built from — if a month is
+          hopeless I can rebuild the plan around different days.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3>Which sessions can move, and which cannot</h3>
+        <ul>
+          <li><strong>"Hard" means four things</strong>, and they are the words printed on the
+          session: <strong>Long ride</strong>, <strong>Long run</strong>,
+          <strong>Endurance brick</strong> (a ride straight into a run), and anything starting with
+          <strong>TEST:</strong>. Everything else is easy, however it feels on the day.</li>
+          <li><strong>Never skip the long ride, the long run or the brick.</strong> They are the
+          plan. The brick is the only session that teaches your legs to run off the bike — riding
+          one day and running the next is not the same thing.</li>
+          <li><strong>Easy sessions are fillers, and fillers are what you drop.</strong> Miss one
+          and you lose almost nothing. Miss a long run and you lose weeks.</li>
+          <li><strong>Leave a day between hard sessions</strong> — an easy session in between, or
+          nothing at all.</li>
+          <li><strong>Doubling up to buy a day off is fine</strong>, on two conditions: only
+          <strong>one hard session</strong> in that day, and the hard sessions either side are still
+          a day apart. So this works:</li>
+        </ul>
+        <ul class="weekex">
+          <li><span class="d">Mon</span> Hard bike</li>
+          <li><span class="d">Tue</span> Easy run</li>
+          <li><span class="d">Wed</span> Hard swim + easy run</li>
+          <li><span class="d">Thu</span> Easy bike</li>
+          <li><span class="d">Fri</span> Off</li>
+          <li><span class="d">Sat</span> Easy bike</li>
+          <li><span class="d">Sun</span> Long run</li>
+        </ul>
+        <ul>
+          <li><strong>When you stack two sessions, keep race order</strong>: swim, then bike, then
+          run. It is what your body will be asked to do on the day, and the order that hurts least.</li>
+          <li><strong>The commute counts.</strong> Run or ride to the pool, swim, then run or ride
+          home — that is your easy run or ride done, with no extra time spent.</li>
+          <li><strong>If you are short of time, do not trim the long ones.</strong> A three-hour
+          ride done in two is a different session, and the week is balanced around those minutes.
+          Tell me and I will move it. Easy sessions are the opposite: do what fits.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3>Flying days, landing days, layovers</h3>
+        <ul>
+          <li><strong>The day you fly, train in the morning if you can — and keep it easy.</strong>
+          An easy session before you go sets up the whole duty. Never a hard one: you are about to
+          spend hours sitting still and dry.</li>
+          <li><strong>Landing day is off.</strong> If you genuinely feel good, an easy or gym
+          session is fine. Never a hard one, and never because the plan says so.</li>
+          <li><strong>Short layover: stay on UK time.</strong> Train before lunch or dinner, eat,
+          then rest before the flight — in that order.</li>
+          <li><strong>Long layover, big time difference:</strong> get outside into daylight as
+          early as you can, and put the session in local daylight hours. Do not train in the small
+          hours of your own body clock — everything is heavier and that is when people get hurt.</li>
+          <li><strong>After a night flight, write the day off in advance.</strong> Put the plan's
+          rest day there when you lay out the month, rather than deciding at 07:00 that you are too
+          tired. You already knew.</li>
+          <li><strong>Pack so a delayed bag cannot cost you a session.</strong> Shoes, shorts,
+          goggles and trunks weigh nothing and live in the cabin bag.</li>
+          <li><strong>Hotel pools are short and odd.</strong> Count minutes, not lengths — your
+          swims are built in minutes anyway.</li>
+          <li><strong>Hotel gym bikes lie about power.</strong> Ride to time and feel, ignore the
+          console. Treadmills are fine; a slight incline feels closer to the road.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3>Eating and drinking around it</h3>
+        <ul>
+          <li><strong>You land dehydrated.</strong> A waking heart rate about <strong>7.5% above
+          your usual</strong> is what dehydration looks like, and the app tells you when yours is.
+          Drink before you decide anything about the day's training.</li>
+          <li><strong>Drink through the flight</strong>, before you are thirsty, and keep drinking
+          downroute. Tomorrow's session is decided by what you drank today.</li>
+          <li><strong>Eat properly after a session</strong>, especially downroute. Something with
+          protein and carbohydrate within the hour.</li>
+          <li><strong>Training is not a ticket to the buffet.</strong> It is the most common way a
+          season's work turns into no change on the scales at all.</li>
+          <li><strong>Practise the fuelling printed on your long sessions.</strong> Those carb,
+          fluid and sodium targets are the ones you will use on race day — find out your stomach
+          disagrees now, not in August.</li>
+          <li><strong>Alcohol on a layover costs you tomorrow's session, not tonight.</strong>
+          Decide with tomorrow in mind.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3>Tired, ill or hurt</h3>
+        <ul>
+          <li><strong>Take your waking heart rate before you get up</strong>, and put it in the
+          app. The cheapest measurement there is, and the one that catches a bad week early.</li>
+        </ul>
+        <blockquote>Note that if you are dehydrated, your heart rate may go up by 7.5 percent. It is
+        also likely to rise if you are stressed or emotional, perhaps by 10–20 percent. … A higher
+        than usual resting heart rate can be a sign of illness; if your rate is high, decide whether
+        to rest or lower the intensity or duration of training until your heart rate returns to
+        normal.<cite>The Triathlon Training Book</cite></blockquote>
+        <ul>
+          <li><strong>Sleep beats a session, every time.</strong> A session on four hours' sleep
+          costs you the next two days — and you still did not get the session.</li>
+          <li><strong>Two bad nights in a row: keep the volume, drop the intensity.</strong> Do the
+          easy work, move the hard session.</li>
+          <li><strong>Ill: nothing below the neck.</strong> A head cold with no fever — easy is
+          usually fine. A chest, a fever, aching all over — no training, and no making it up. This
+          is judgement, and it should be cautious.</li>
+          <li><strong>Hurt: pain that changes how you move means stop.</strong> A niggle that fades
+          in the first ten minutes and leaves your stride alone is usually fine. Anything that makes
+          you limp or shorten a stride is not.</li>
+          <li><strong>If one sport hurts, keep the volume in the others.</strong> A sore shin does
+          not stop you riding or swimming.</li>
+          <li><strong>Tell me early.</strong> Every message I have had started with "it is probably
+          nothing". Send it anyway. A week off now is cheaper than six weeks off later.</li>
+          <li><strong>Take the easy week.</strong> When the plan gives you a recovery week, take all
+          of it. The training does not make you fitter; recovering from it does.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3>The gym</h3>
+        <ul>
+          <li><strong>Optional, and not counted in the week's hours.</strong> Genuinely worth doing
+          — it keeps you in one piece — but it never comes before a session on the plan.</li>
+          <li><strong>Do it at the end of the day's other sessions</strong>, if you have the time
+          and energy. Swim, bike and run first; gym if there is anything left.</li>
+          <li><strong>A hotel gym is enough.</strong> Dumbbells, a mat and your own body weight
+          cover everything the plan asks for.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3>Log what you actually did</h3>
+        <ul>
+          <li><strong>Log the sessions you did and the ones you missed</strong>, with a word about
+          why. The missed ones are the useful data: three skipped swims in a month tells me
+          something three good ones do not.</li>
+          <li><strong>Put the plan in your phone.</strong> The app gives you a calendar feed (the
+          <code>.ics</code> link) that keeps itself up to date, so the week travels with you.</li>
+        </ul>
+      </div>
+
+      <div class="card shortcard">
+        <h3>The short version</h3>
+        <p class="note">Keep this with your roster.</p>
+        <ul>
+          <li>A missed session is gone. Never make it up next week.</li>
+          <li>Roster first. Plan second.</li>
+          <li>Long ride, long run, brick: never skipped.</li>
+          <li>Easy sessions are fillers — drop those first.</li>
+          <li>One day between hard sessions.</li>
+          <li>Two sessions in a day is fine; two hard ones is not.</li>
+          <li>Race order when you stack them: swim, bike, run.</li>
+          <li>Fly-out day: easy session in the morning.</li>
+          <li>Landing day: off.</li>
+          <li>Downroute: train, eat, rest, in that order.</li>
+          <li>Drink more than you think, eat less than you want.</li>
+          <li>Waking heart rate up 10%: rest or go easy.</li>
+          <li>Sleep beats a session.</li>
+          <li>Hurt changes how you move: stop, and tell me.</li>
+          <li>Gym last, and only if there is energy left.</li>
+        </ul>
+      </div>
+
+    </div>`;
   }
 
   // ---------- Account page ----------

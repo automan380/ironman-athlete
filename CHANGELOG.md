@@ -3,6 +3,13 @@
 All notable changes to the athlete app. The version here matches `APP_VERSION` in `app.js`
 (shown in the in-app settings menu). Dates are YYYY-MM-DD.
 
+## 2.5.0 — 2026-10-13
+- **New "Moving workouts" page** in the side menu, under Zones. It is your coach's guide to training
+  around an airline roster — *Training around the roster* — formatted to read on your phone: when a
+  session can move and when it cannot, flying and landing days, layovers, eating and drinking, what to
+  do when you are tired, ill or hurt, the gym, and a short tear-off summary to keep with your roster.
+- Service-worker cache bumped to `v12`.
+
 ## 2.4.0 — 2026-10-12
 - **Enter your test results in the app.** Open a test your coach scheduled and you now get a form with
   the right boxes for that test — a swim CSS asks for your 400 m and 200 m times, a bike time trial

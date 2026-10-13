@@ -213,3 +213,38 @@ table.fuel td { padding: .25rem 0; }
                     border: 1px solid var(--line); background: var(--surface2); color: var(--fg); border-radius: 8px; }
 .segmented button.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-weight: 700; }
 .setversion { text-align: center; font-size: .75rem; color: var(--muted); border-top: 1px solid var(--line); padding-top: .6rem; }
+
+/* Moving workouts (Training around the roster) */
+.doc { display: flex; flex-direction: column; gap: 1rem; }
+.doc .card { gap: .6rem; }
+.doc .lead p { margin: 0; }
+.doc h3 { margin: 0; font-size: 1.02rem; color: var(--accent); }
+.doc p { margin: 0; font-size: .92rem; line-height: 1.55; }
+.doc ul { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: .5rem; }
+.doc li { font-size: .92rem; line-height: 1.5; }
+.doc strong { font-weight: 700; }
+.doc blockquote { margin: .2rem 0; padding: .6rem .8rem; background: var(--surface2);
+                  border-left: 3px solid var(--accent); border-radius: 8px;
+                  font-size: .88rem; line-height: 1.5; color: var(--fg); }
+.doc blockquote cite { display: block; margin-top: .4rem; font-size: .78rem; font-style: normal;
+                       color: var(--muted); }
+/* Compact layover table: fits five columns on a phone */
+table.movetable { width: 100%; border-collapse: collapse; font-size: .82rem; }
+table.movetable th, table.movetable td { padding: .4rem .3rem; border-top: 1px solid var(--line);
+                                         text-align: center; }
+table.movetable th { color: var(--muted); font-weight: 600; font-size: .72rem;
+                     text-transform: uppercase; letter-spacing: .02em; border-top: none; }
+table.movetable td:first-child, table.movetable th:first-child { text-align: left; font-weight: 600; }
+table.movetable .y { color: var(--accent); font-weight: 700; }
+table.movetable .n { color: var(--muted); }
+/* Week example as a vertical day list, not a seven-column table */
+ul.weekex { list-style: none; padding: 0; gap: 0; border: 1px solid var(--line); border-radius: 8px;
+            overflow: hidden; }
+ul.weekex li { display: flex; gap: .7rem; padding: .45rem .7rem; font-size: .88rem;
+               border-top: 1px solid var(--line); }
+ul.weekex li:first-child { border-top: none; }
+ul.weekex .d { flex: 0 0 2.6rem; font-weight: 700; color: var(--muted); }
+.shortcard { border-color: var(--accent); }
+.shortcard h3 { color: var(--accent); }
+.shortcard ul { gap: .35rem; }
+.shortcard li { font-size: .88rem; }
