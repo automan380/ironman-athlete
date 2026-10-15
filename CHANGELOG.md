@@ -3,6 +3,18 @@
 All notable changes to the athlete app. The version here matches `APP_VERSION` in `app.js`
 (shown in the in-app settings menu). Dates are YYYY-MM-DD.
 
+## 2.7.0 — 2026-10-15
+- **Your plan now opens with no internet.** Before, if you opened the app offline (or first thing in
+  the morning, when the login had quietly expired), you got a blank screen for up to half a minute and
+  sometimes a sign-in page you couldn't complete without a connection. Now the app shows the plan it
+  saved on your phone **straight away**, and checks your sign-in quietly in the background. On the road,
+  on a plane, in the pool car park with no signal — your week is there.
+- **You can enter a test result offline too.** Like logging a session, a test result you enter without a
+  connection is saved on your phone and marked "waiting to send", then goes to your coach automatically
+  the moment you're back online. Nothing is lost.
+- Under the hood: the app no longer shows a white screen if a file fails to load, and the service-worker
+  cache is bumped to `v15`.
+
 ## 2.6.1 — 2026-10-13
 - **No more false error when you send a test result.** On iPhone the app could show an error after
   "Send to Coach" even though the result had actually reached your coach. Now, if the send looks like

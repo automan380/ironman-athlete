@@ -122,6 +122,8 @@ button:disabled { opacity: .55; }
 .check input { width: auto; }
 .muted { color: var(--muted); }
 .small { font-size: .85rem; }
+.boot { color: var(--muted); text-align: center; padding: 3rem 1rem; font-size: .95rem; }
+.boot.err { color: var(--fg); }
 
 /* Week view */
 .weekhead { display: flex; align-items: center; gap: .5rem; }

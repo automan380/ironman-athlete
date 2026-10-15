@@ -6,7 +6,7 @@
 (function () {
   "use strict";
 
-  const APP_VERSION = "2.6.1";          // shown in the settings menu; keep in step with CHANGELOG.md
+  const APP_VERSION = "2.7.0";          // shown in the settings menu; keep in step with CHANGELOG.md
   let pendingReload = false;            // set when the athlete taps "update"; drives the one reload below
   const CFG = window.IRONMAN_CONFIG || {};
   // "Remember me on this device": when on, the session lives in localStorage and survives app
@@ -19,6 +19,16 @@
     setItem(k, v) { try { (rememberOn() ? localStorage : sessionStorage).setItem(k, v); } catch (e) { /* private mode */ } },
     removeItem(k) { try { localStorage.removeItem(k); } catch (e) { /* ignore */ } try { sessionStorage.removeItem(k); } catch (e) { /* ignore */ } },
   };
+  // The vendored Supabase library must have loaded before this runs (index.html loads it first). If a
+  // precache gap ever serves something else in its place, fail with a readable message instead of a
+  // silent white page -- createClient would otherwise throw at module load and nothing would render.
+  if (!window.supabase || typeof window.supabase.createClient !== "function") {
+    try {
+      document.getElementById("app").innerHTML =
+        '<div class="boot err">Couldn\'t load a required file. Reconnect once and reopen the app.</div>';
+    } catch (e) { /* ignore */ }
+    return;
+  }
   const SB = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {
     auth: { persistSession: true, detectSessionInUrl: false, autoRefreshToken: true, storage: authStorage },
   });
@@ -88,6 +98,7 @@
       test_sent: "Sent. Your coach will review and approve it — your zones update once they do.",
       test_pending: "Already sent, waiting for your coach. You can correct it and send again.",
       test_offline: "You're offline — connect to send your result.",
+      test_queued: "Saved on your phone — it'll be sent to your coach when you're back online.",
       test_bad_time: "Enter a time as mm:ss, e.g. 19:20.",
       test_need: "Fill in {field}.", test_conditions: "Conditions (optional)",
       test_indoor: "Done indoors / on a trainer", mmss: "mm:ss",
@@ -161,6 +172,7 @@
       test_sent: "Inviato. Il coach lo esaminerà e approverà — le zone si aggiornano quando lo fa.",
       test_pending: "Già inviato, in attesa del coach. Puoi correggerlo e inviarlo di nuovo.",
       test_offline: "Sei offline — collegati per inviare il risultato.",
+      test_queued: "Salvato sul telefono — verrà inviato al coach al ritorno della rete.",
       test_bad_time: "Inserisci un tempo come mm:ss, es. 19:20.",
       test_need: "Compila: {field}.", test_conditions: "Condizioni (facoltativo)",
       test_indoor: "Fatto al chiuso / sui rulli", mmss: "mm:ss",
@@ -947,28 +959,52 @@
     try { await _route(); } finally { _routing = false; if (_pending) { _pending = false; route(); } }
   }
 
+  // Paint the plan already saved on this device, with NO network call, and return whether it showed
+  // one. This makes boot cache-first: the athlete sees their plan instantly, even while a stalled
+  // token refresh runs below (gotrue retries an expired token for up to ~30s) and even when truly
+  // offline. Reads the athlete from the cache directly -- loadAthlete() would go to the network when
+  // navigator.onLine, which we must not do before we know the session.
+  async function renderCachedPlan() {
+    if (!rememberOn()) return false;                     // remember-me off -> nothing persisted
+    if (!S.athleteId) {
+      const cached = await idbGet("cache", "athlete");
+      if (cached) { S.athleteId = cached.athlete_id; S.displayName = cached.display_name || ""; }
+    }
+    if (!S.athleteId) return false;
+    if (!S.weeks.length) await loadCache();
+    if (!S.weeks.length) return false;
+    topbar.hidden = false;
+    if (S.weekIdx == null) S.weekIdx = currentWeekIdx();
+    gateSection();
+    renderSection(); setSync(); setBell();
+    return true;
+  }
+
   async function _route() {
+    // 1) Optimistic paint from the device cache, BEFORE any network-dependent auth call.
+    const painted = await renderCachedPlan();
+
+    // 2) Resolve the session. Offline with an expired access token, getSession() refreshes and gotrue
+    //    retries the network for up to ~30s before returning {session:null}; that stall now holds the
+    //    route mutex but is invisible, because the cached plan is already on screen. This getSession is
+    //    NOT inside onAuthStateChange, so there is no auth-lock deadlock.
     const { data } = await SB.auth.getSession();
     const session = data && data.session;
+
+    // 3) No usable session. A stalled/failed refresh counts the same as offline: keep the cached plan
+    //    if we painted one; only show the real login when there is genuinely nothing to show.
     if (!session) {
-      // No session. If "remember me" is on and we're offline, show the plan we already cached
-      // instead of blocking on a login the athlete cannot complete without a connection.
-      if (!navigator.onLine && rememberOn()) {
-        await loadAthlete();                       // offline branch reads the cached athlete
-        if (S.athleteId) {
-          await loadCache();
-          if (S.weeks.length) {
-            topbar.hidden = false;
-            if (S.weekIdx == null) S.weekIdx = currentWeekIdx();
-            renderSection(); setSync(); setBell(); return;
-          }
-        }
-      }
+      if (painted) { setSync(); setBell(); return; }
       showLogin(); return;
     }
+
+    // 4) Signed in.
     S.email = (session.user && session.user.email) || "";
     topbar.hidden = false;
-    if (!S.athleteId) await loadAthlete();
+    // Online, ALWAYS re-verify who this email belongs to now (loadAthlete clears a stale cached
+    // athlete so a different person never inherits the previous one's id). Offline, keep the cached id.
+    if (navigator.onLine) await loadAthlete();
+    else if (!S.athleteId) await loadAthlete();
     if (!S.athleteId && navigator.onLine) {   // signed in, but this email is linked to no athlete
       renderNotConnected(data.session.user && data.session.user.email);
       return;
@@ -976,7 +1012,9 @@
     if (!S.weeks.length) await loadCache();
     if (S.weekIdx == null) S.weekIdx = currentWeekIdx();
     gateSection();
-    renderSection();
+    if (!painted) renderSection();                       // cache already painted it -> no double render
+
+    // 5) Online: freshen in the background, exactly as before.
     if (navigator.onLine) {
       touchLastSeen();                                    // stamp presence on open, don't wait for the poll
       try { await refresh(); if (S.weekIdx == null) S.weekIdx = currentWeekIdx(); gateSection(); renderSection(); } catch (e) { console.warn("refresh failed", e); }
@@ -1050,7 +1088,19 @@
     await idbSet("cache", "logs", S.logs);
     await loadOutbox();
   }
-  async function loadOutbox() { S.outbox = {}; (await idbAll("outbox")).forEach((it) => { S.outbox[it.key] = it; }); }
+  async function loadOutbox() {
+    S.outbox = {};
+    (await idbAll("outbox")).forEach((it) => {
+      S.outbox[it.key] = it;
+      // A test result queued offline isn't in the published plan snapshot, so reflect it into the
+      // submissions map here -- that is what renderTest reads to show it as "waiting to send".
+      if (it.table === "test_submission") {
+        const r = it.record;
+        S.submissions[`${r.protocol}|${r.on_date}`] =
+          { protocol: r.protocol, on_date: r.on_date, fields: r.fields, conditions: r.conditions, indoor: r.indoor, ingested_at: null, _queued: true };
+      }
+    });
+  }
 
   // ================= login =================
   function showLogin() {
@@ -1356,7 +1406,7 @@
       const sub = S.submissions[`${ts.protocol}|${ts.on_date}`];
       const prev = sub && sub.fields;
       html += `<div class="sectiontitle">${T("test_enter")}</div>`;
-      if (sub) html += `<p class="note">${T("test_pending")}</p>`;
+      if (sub) html += `<p class="note">${T(sub._queued ? "test_queued" : "test_pending")}</p>`;
       html += `<form id="testform">`;
       fields.forEach((f) => { html += testFieldHtml(f, prev); });
       html += `<div class="field"><label for="tf_conditions">${T("test_conditions")}</label>
@@ -1392,46 +1442,29 @@
     }
     const conditions = (form.elements["conditions"] && form.elements["conditions"].value || "").trim();
     const indoor = !!($("#tf_indoor") && $("#tf_indoor").checked);
-    if (!navigator.onLine || !S.athleteId) {
+    if (!S.athleteId) {
       m.hidden = false; m.className = "msg err"; m.textContent = T("test_offline"); return;
     }
-    const btn = $("#testsend"); btn.disabled = true; const t = btn.textContent; btn.textContent = T("test_submitting");
-    const stamp = new Date().toISOString();
+    const k = "test|" + ts.protocol + "|" + ts.on_date;
     const row = {
       athlete_id: S.athleteId, protocol: ts.protocol, on_date: ts.on_date,
       fields, conditions, indoor, device_id: deviceId(),
-      client_updated_at: stamp,
+      client_updated_at: new Date().toISOString(),
       ingested_at: null,            // (re)submitting makes the coach pull it again
     };
-    // Shows the "sent" state once we KNOW the row landed. Mobile Safari sometimes reports a network
-    // error on the RESPONSE even though the write committed, which used to surface a scary error over
-    // a submission that actually reached the coach.
-    const markSent = () => {
-      S.submissions[`${ts.protocol}|${ts.on_date}`] = { protocol: ts.protocol, on_date: ts.on_date, fields, ingested_at: null };
-      m.hidden = false; m.className = "msg info"; m.textContent = T("test_sent");
-      btn.textContent = T("test_update");
-    };
-    try {
-      const { error } = await SB.from("test_submission").upsert(row, { onConflict: "athlete_id,protocol,on_date" });
-      if (error) throw error;
-      markSent();
-    } catch (e) {
-      console.warn("test submit:", e);
-      // Did our write land despite the error? Read the submission back and compare OUR stamp (a
-      // different/old row must NOT count as success). Timestamps compared as instants: Postgres
-      // returns "+00:00" where we sent "Z".
-      let landed = false;
-      try {
-        const { data: back } = await SB.from("test_submission")
-          .select("client_updated_at")
-          .eq("athlete_id", S.athleteId).eq("protocol", ts.protocol).eq("on_date", ts.on_date)
-          .maybeSingle();
-        landed = !!(back && back.client_updated_at &&
-                    new Date(back.client_updated_at).getTime() === new Date(stamp).getTime());
-      } catch (e2) { console.warn("test submit read-back:", e2); }
-      if (landed) { markSent(); }
-      else { m.hidden = false; m.className = "msg err"; m.textContent = T("error") + ((e && e.message) || e); btn.textContent = t; }
-    } finally { btn.disabled = false; }
+    // Queue it exactly like a session log: written to IndexedDB first, shown as sent optimistically,
+    // then flushed now (a no-op offline; upserts when back online). The flush is idempotent on
+    // (athlete_id, protocol, on_date), so a mobile-Safari false "network error" on a write that
+    // actually committed just re-upserts the identical row next time -- no scary error, no lost result,
+    // which is why the old online-only read-back is gone.
+    const item = { key: k, table: "test_submission", onConflict: "athlete_id,protocol,on_date", record: row };
+    await idbPut("outbox", item);
+    S.outbox[k] = item;
+    S.submissions[`${ts.protocol}|${ts.on_date}`] =
+      { protocol: ts.protocol, on_date: ts.on_date, fields, conditions, indoor, ingested_at: null, _queued: true };
+    m.hidden = false; m.className = "msg info"; m.textContent = navigator.onLine ? T("test_sent") : T("test_queued");
+    const btn = $("#testsend"); if (btn) btn.textContent = T("test_update");
+    flushOutbox().then(setSync);
   }
 
   // ================= logging =================
@@ -1547,8 +1580,10 @@
       payload, device_id: deviceId(), client_rev: prevRev + 1,
       client_updated_at: new Date().toISOString(), snapshot_checksum: (S.meta && S.meta.checksum) || null,
     };
-    await idbPut("outbox", { key: k, record });
-    S.outbox[k] = { key: k, record };
+    // The outbox carries the destination table so the same queue flushes both logs and test results.
+    const item = { key: k, table: "log", onConflict: "athlete_id,on_date,session_key", record };
+    await idbPut("outbox", item);
+    S.outbox[k] = item;
     renderSession(s);
     flushOutbox().then(() => { if (S.current === s) renderSession(s); setSync(); });
   }
@@ -1557,11 +1592,19 @@
     const items = await idbAll("outbox");
     for (const it of items) {
       try {
-        const { error } = await SB.from("log").upsert(it.record, { onConflict: "athlete_id,on_date,session_key" });
+        const table = it.table || "log";                 // older queued items (no table) are logs
+        const onConflict = it.onConflict || "athlete_id,on_date,session_key";
+        const { error } = await SB.from(table).upsert(it.record, { onConflict });
         if (error) throw error;
         await idbDel("outbox", it.key);
         delete S.outbox[it.key];
-        S.logs[it.key] = Object.assign({}, it.record);
+        if (table === "test_submission") {
+          const r = it.record;
+          S.submissions[`${r.protocol}|${r.on_date}`] =
+            { protocol: r.protocol, on_date: r.on_date, fields: r.fields, conditions: r.conditions, indoor: r.indoor, ingested_at: null };
+        } else {
+          S.logs[it.key] = Object.assign({}, it.record);
+        }
       } catch (e) { console.warn("flush failed for", it.key, e); break; }
     }
     await idbSet("cache", "logs", S.logs);

@@ -33,7 +33,12 @@
   </header>
   <div id="backdrop" class="backdrop" hidden></div>
   <nav id="drawer" class="drawer" hidden></nav>
-  <main id="app" aria-live="polite"></main>
+  <main id="app" aria-live="polite">
+    <!-- Momentary placeholder so a hiccup before the first JS render is never a pure-white screen.
+         The first renderSection()/showLogin() replaces it. Pre-JS, so the text can't use T(). -->
+    <div class="boot" role="status">Loading your training…</div>
+    <noscript><div class="boot">This app needs JavaScript enabled to show your plan.</div></noscript>
+  </main>
 
   <script src="vendor/supabase.js"></script>
   <script src="config.js"></script>

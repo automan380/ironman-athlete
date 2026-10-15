@@ -2,7 +2,7 @@
 // Supabase library) and serves same-origin requests cache-first. It deliberately does NOT touch
 // Supabase API calls (a different origin) — those go straight to the network, and when there is no
 // network the app falls back to the plan it cached in IndexedDB. Writes (POST/PATCH) are never cached.
-const CACHE = "ironman-athlete-v14";
+const CACHE = "ironman-athlete-v15";
 const SHELL = [
   "./", "./index.html", "./styles.css", "./app.js", "./config.js",
   "./vendor/supabase.js", "./manifest.webmanifest",
@@ -42,7 +42,13 @@ self.addEventListener("fetch", (e) => {
           caches.open(CACHE).then((c) => c.put(req, copy));
           return res;
         })
-        .catch(() => caches.match("./index.html"))        // offline navigation → the app shell
+        .catch(() => {
+          // Only a NAVIGATION falls back to the app shell. Returning index.html's HTML as the body of
+          // a script/stylesheet request (any other same-origin miss) would be parsed as that resource
+          // -> a blank page. A real error is clearer and never masks a precache gap as a white screen.
+          if (req.mode === "navigate" || req.destination === "document") return caches.match("./index.html");
+          return Response.error();
+        })
     )
   );
 });
