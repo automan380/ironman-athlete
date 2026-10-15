@@ -6,7 +6,7 @@
 (function () {
   "use strict";
 
-  const APP_VERSION = "2.7.0";          // shown in the settings menu; keep in step with CHANGELOG.md
+  const APP_VERSION = "2.7.1";          // shown in the settings menu; keep in step with CHANGELOG.md
   let pendingReload = false;            // set when the athlete taps "update"; drives the one reload below
   const CFG = window.IRONMAN_CONFIG || {};
   // "Remember me on this device": when on, the session lives in localStorage and survives app
@@ -56,6 +56,7 @@
       select_all: "Select all", deselect: "Deselect", del_selected: "Delete", del_offline: "You're offline — connect to delete.",
       msg_placeholder: "Write your message…",
       n_message: "Message from your coach", n_plan: "Plan updated", n_zones: "Zones updated", n_app: "App updated",
+      n_session_edit: "Session changed",
       n_app_available: "Update available", app_available: "A new version of the app is ready — tap to update.",
       app_update_now: "Update now",
       app_updated: "App updated to v{v}.",
@@ -130,6 +131,7 @@
       select_all: "Seleziona tutti", deselect: "Deseleziona", del_selected: "Cancella", del_offline: "Sei offline — collegati per cancellare.",
       msg_placeholder: "Scrivi il tuo messaggio…",
       n_message: "Messaggio dal coach", n_plan: "Piano aggiornato", n_zones: "Zone aggiornate", n_app: "App aggiornata",
+      n_session_edit: "Sessione modificata",
       n_app_available: "Aggiornamento disponibile", app_available: "È pronta una nuova versione dell'app — tocca per aggiornare.",
       app_update_now: "Aggiorna ora",
       app_updated: "App aggiornata alla v{v}.",
@@ -876,6 +878,7 @@
   }
   function noticeLabel(kind) {
     return kind === "plan_update" ? T("n_plan") : kind === "zones_update" ? T("n_zones")
+      : kind === "session_edit" ? T("n_session_edit")
       : kind === "app_available" ? T("n_app_available") : kind === "app" ? T("n_app") : T("n_message");
   }
   function renderInbox() {

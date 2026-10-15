@@ -3,6 +3,10 @@
 All notable changes to the athlete app. The version here matches `APP_VERSION` in `app.js`
 (shown in the in-app settings menu). Dates are YYYY-MM-DD.
 
+## 2.7.1 — 2026-10-15
+- When your coach changes one of your sessions, the notice now reads **"Session changed"** (before it
+  showed as a generic coach message). Service-worker cache bumped to `v16`.
+
 ## 2.7.0 — 2026-10-15
 - **Your plan now opens with no internet.** Before, if you opened the app offline (or first thing in
   the morning, when the login had quietly expired), you got a blank screen for up to half a minute and
