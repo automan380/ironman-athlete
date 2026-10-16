@@ -3,6 +3,14 @@
 All notable changes to the athlete app. The version here matches `APP_VERSION` in `app.js`
 (shown in the in-app settings menu). Dates are YYYY-MM-DD.
 
+## 2.9.0 — 2026-10-16
+- **New "What's new" page.** Settings › **Changelog** (under the version) opens what changed in each
+  version, in the language you chose (English or Italian). The in-app text lives in `changes.js` —
+  keep it in step with this file.
+- **Sync button in the top bar**, right next to "up to date": tap it to sync at any time; it spins while
+  it works and the status says how it went. It is no longer in Settings.
+- Service-worker cache bumped to `v18`.
+
 ## 2.8.0 — 2026-10-16
 - **Log a session as done on another day and it moves there.** Pick "Done on" a different day and the
   session moves to that day straight away (on your coach's screens too) — no more "logged Saturday,

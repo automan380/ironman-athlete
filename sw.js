@@ -2,9 +2,9 @@
 // Supabase library) and serves same-origin requests cache-first. It deliberately does NOT touch
 // Supabase API calls (a different origin) — those go straight to the network, and when there is no
 // network the app falls back to the plan it cached in IndexedDB. Writes (POST/PATCH) are never cached.
-const CACHE = "ironman-athlete-v17";
+const CACHE = "ironman-athlete-v18";
 const SHELL = [
-  "./", "./index.html", "./styles.css", "./app.js", "./config.js",
+  "./", "./index.html", "./styles.css", "./app.js", "./changes.js", "./config.js",
   "./vendor/supabase.js", "./manifest.webmanifest",
   "./icons/logo.png", "./icons/icon-192.png", "./icons/icon-512.png",
   "./icons/icon-maskable-512.png", "./icons/apple-touch-icon-180.png", "./icons/favicon-32.png",

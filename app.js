@@ -6,7 +6,7 @@
 (function () {
   "use strict";
 
-  const APP_VERSION = "2.8.0";          // shown in the settings menu; keep in step with CHANGELOG.md
+  const APP_VERSION = "2.9.0";          // shown in the settings menu; keep in step with CHANGELOG.md
   let pendingReload = false;            // set when the athlete taps "update"; drives the one reload below
   const CFG = window.IRONMAN_CONFIG || {};
   // "Remember me on this device": when on, the session lives in localStorage and survives app
@@ -61,7 +61,7 @@
       app_update_now: "Update now",
       app_updated: "App updated to v{v}.",
       theme: "Theme", theme_auto: "Auto", theme_light: "Light", theme_dark: "Dark", language: "Language",
-      account: "Account", signed_in_as: "Signed in as", sync_now: "Sync now", syncing: "Syncing…",
+      account: "Account", signed_in_as: "Signed in as", sync_now: "Sync now", syncing: "Syncing…", changelog: "Changelog", whatsnew: "What's new", sync_error: "sync failed",
       change_pw: "Change password", new_pw_ph: "New password", save_pw: "Save password",
       pw_saved: "Password updated.", pw_short: "Use at least 6 characters.",
       totals: "Totals", t_plan: "plan", t_done: "done", t_total: "Total",
@@ -136,7 +136,7 @@
       app_update_now: "Aggiorna ora",
       app_updated: "App aggiornata alla v{v}.",
       theme: "Tema", theme_auto: "Auto", theme_light: "Chiaro", theme_dark: "Scuro", language: "Lingua",
-      account: "Account", signed_in_as: "Connesso come", sync_now: "Sincronizza ora", syncing: "Sincronizzo…",
+      account: "Account", signed_in_as: "Connesso come", sync_now: "Sincronizza ora", syncing: "Sincronizzo…", changelog: "Changelog", whatsnew: "Novità", sync_error: "sincronizzazione non riuscita",
       change_pw: "Cambia password", new_pw_ph: "Nuova password", save_pw: "Salva password",
       pw_saved: "Password aggiornata.", pw_short: "Usa almeno 6 caratteri.",
       totals: "Totali", t_plan: "prev.", t_done: "fatto", t_total: "Totale",
@@ -321,6 +321,7 @@
     else if (S.section === "moving") renderMoving();
     else if (S.section === "account") renderAccount();
     else if (S.section === "settings") renderSettingsPage();
+    else if (S.section === "whatsnew") renderWhatsNew();
     else if (S.section === "questionnaires") renderQuestionnaires();
     else if (S.section === "inbox") renderInbox();
     else renderWeek();
@@ -606,9 +607,8 @@
       <div class="card">
         <div class="setgroup"><div class="setlabel">${T("theme")}</div>${seg("theme", [["auto", T("theme_auto")], ["light", T("theme_light")], ["dark", T("theme_dark")]])}</div>
         <div class="setgroup"><div class="setlabel">${T("language")}</div>${seg("lang", [["en", "English"], ["it", "Italiano"]])}</div>
-        <button id="syncnow" class="ghost">${T("sync_now")}</button>
-        <div id="syncmsg" class="msg" hidden></div>
-        <div class="setversion">v${APP_VERSION}</div>
+        <div class="setversion">v${APP_VERSION}
+          <div><button id="changelogbtn" class="ghost small">${T("changelog")}</button></div></div>
       </div>`;
     app.querySelectorAll(".segmented").forEach((sg) => sg.querySelectorAll("button").forEach((b) =>
       b.addEventListener("click", () => {
@@ -617,7 +617,21 @@
         if (set === "theme") applyTheme(); else applyLang();
         renderSettingsPage();
       })));
-    $("#syncnow").addEventListener("click", syncNow);
+    $("#changelogbtn").addEventListener("click", () => go("whatsnew"));
+  }
+
+  // ---------- What's new (Settings → Changelog) ----------
+  // From changes.js, in the language chosen in Settings (English if a line has no Italian yet).
+  function renderWhatsNew() {
+    $("#back").hidden = false;
+    const it = S.lang === "it";
+    const list = (window.APP_CHANGES || []).map((c) => {
+      const lines = (it && c.it && c.it.length ? c.it : c.en) || [];
+      return `<div class="card whatsnew"><div class="wnhead"><strong>v${esc(c.v)}</strong>
+          <span class="muted small">${esc(c.date)}</span></div>
+        <ul class="lines">${lines.map((l) => `<li>${esc(l)}</li>`).join("")}</ul></div>`;
+    }).join("");
+    app.innerHTML = `<h2 class="pagetitle">${T("whatsnew")}</h2>${list || `<p class="muted">—</p>`}`;
   }
 
   // ---------- Questionnaires page (initial intake) ----------
@@ -772,18 +786,21 @@
     });
   }
 
+  // The sync button sits in the top bar, right of the status ("up to date"): it spins while it works
+  // and the status itself says how it went.
   async function syncNow() {
-    const btn = $("#syncnow"), m = $("#syncmsg");
-    if (!navigator.onLine) { m.hidden = false; m.className = "msg err"; m.textContent = T("sync_offline"); return; }
-    btn.disabled = true; const t = btn.textContent; btn.textContent = T("syncing");
+    const btn = $("#syncbtn"), st = $("#sync");
+    if (!btn || btn.disabled) return;
+    if (!navigator.onLine) { setSync(); return; }
+    btn.disabled = true; btn.classList.add("spinning"); if (st) st.textContent = T("syncing");
     try {
       await flushOutbox();
       await refresh();
       repaint(); setSync();
-      m.hidden = false; m.className = "msg info"; m.textContent = T("sync_updated");
     } catch (e) {
-      m.hidden = false; m.className = "msg err"; m.textContent = T("error") + ((e && e.message) || e);
-    } finally { btn.disabled = false; btn.textContent = t; }
+      if (st) st.textContent = T("sync_error");
+      console.warn("sync failed", e);
+    } finally { btn.disabled = false; btn.classList.remove("spinning"); }
   }
 
   async function changePassword() {
@@ -949,7 +966,11 @@
     loadPrefs(); applyTheme(); applyLang();
     registerSW();
     checkAppUpdate();
-    $("#back").addEventListener("click", () => { S.current = null; renderSection(); });
+    $("#back").addEventListener("click", () => {
+      if (S.section === "whatsnew") { go("settings"); return; }   // What's new -> back to Settings
+      S.current = null; renderSection();
+    });
+    $("#syncbtn").addEventListener("click", syncNow);
     $("#menu").addEventListener("click", (e) => {
       e.stopPropagation();
       const d = $("#drawer");
@@ -1640,6 +1661,8 @@
   // ================= chrome =================
   function setSync() {
     const el = $("#sync");
+    const sb = $("#syncbtn");
+    if (sb) { sb.title = T("sync_now"); sb.setAttribute("aria-label", T("sync_now")); }
     if (!el) return;
     const n = Object.keys(S.outbox).length;
     if (!navigator.onLine) el.textContent = n ? T("sync_offline_q", { n }) : T("sync_offline");

@@ -47,6 +47,11 @@ body { background: var(--bg); color: var(--fg); font-family: var(--sans); line-h
            border: none; border-radius: 8px; padding: .35rem .6rem; cursor: pointer; line-height: 1; }
 .iconbtn:active { transform: translateY(1px); }
 .sync { font-size: .75rem; white-space: nowrap; color: color-mix(in srgb, var(--topbar-fg) 80%, transparent); }
+.sync { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.syncbtn { margin-left: -.2rem; padding: .35rem .45rem; flex: none; }
+.syncbtn:disabled { opacity: 1; }
+.syncbtn.spinning svg { animation: spin .9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 /* Notifications bell (top bar) */
 .bell { position: relative; display: inline-flex; align-items: center; justify-content: center; }
@@ -230,6 +235,11 @@ table.fuel td { padding: .25rem 0; }
                     border: 1px solid var(--line); background: var(--surface2); color: var(--fg); border-radius: 8px; }
 .segmented button.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-weight: 700; }
 .setversion { text-align: center; font-size: .75rem; color: var(--muted); border-top: 1px solid var(--line); padding-top: .6rem; }
+.setversion button.ghost.small { margin-top: .4rem; font-size: .8rem; padding: .3rem .8rem; width: auto; }
+.whatsnew { margin-bottom: .7rem; }
+.whatsnew .wnhead { display: flex; align-items: baseline; justify-content: space-between; gap: .5rem; margin-bottom: .3rem; }
+.whatsnew ul.lines { margin: 0; padding-left: 1.1rem; }
+.whatsnew ul.lines li { margin: .2rem 0; }
 
 /* Moving workouts (Training around the roster) */
 .doc { display: flex; flex-direction: column; gap: 1rem; }
