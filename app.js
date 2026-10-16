@@ -6,7 +6,7 @@
 (function () {
   "use strict";
 
-  const APP_VERSION = "2.7.1";          // shown in the settings menu; keep in step with CHANGELOG.md
+  const APP_VERSION = "2.8.0";          // shown in the settings menu; keep in step with CHANGELOG.md
   let pendingReload = false;            // set when the athlete taps "update"; drives the one reload below
   const CFG = window.IRONMAN_CONFIG || {};
   // "Remember me on this device": when on, the session lives in localStorage and survives app
@@ -842,6 +842,18 @@
         .eq("direction", "out").order("created_at", { ascending: false });
       if (data) { S.messages = data; setBell(); }
     } catch (e) { /* ignore */ }
+    silentRefresh();
+  }
+  // Keep the plan in step with the coach's changes WITHOUT disturbing the athlete: re-read it and
+  // redraw the week being looked at, at the same scroll position. Never while a session or a form is
+  // open (that would throw away what they are typing) or while something waits in the outbox.
+  async function silentRefresh() {
+    if (!navigator.onLine || !S.athleteId || document.hidden) return;
+    if (S.section !== "plan" || S.view !== "week" || S.current) return;
+    if (Object.keys(S.outbox || {}).length) return;
+    const y = window.scrollY;
+    try { await refresh(); } catch (e) { return; }
+    if (S.section === "plan" && S.view === "week" && !S.current) { renderWeek(); window.scrollTo(0, y); }
   }
   // A light heartbeat so the coach's roster can show a live presence dot. Fire-and-forget: it stamps
   // only last_seen (a SECURITY DEFINER function), never anything the athlete types, and a failure is
@@ -948,7 +960,7 @@
     window.addEventListener("online", () => { setSync(); flushOutbox().then(repaint); pollMessages(); });
     window.addEventListener("offline", setSync);
     document.addEventListener("visibilitychange", () => { if (!document.hidden) pollMessages(); });
-    setInterval(pollMessages, 60000);
+    setInterval(pollMessages, 30000);
     // Supabase runs this callback while holding the auth lock; calling any SB.* inside it deadlocks.
     // Defer to the next tick, out of the lock, before (re-)routing.
     SB.auth.onAuthStateChange(() => { setTimeout(route, 0); });
@@ -1588,7 +1600,19 @@
     await idbPut("outbox", item);
     S.outbox[k] = item;
     renderSession(s);
-    flushOutbox().then(() => { if (S.current === s) renderSession(s); setSync(); });
+    flushOutbox().then(async () => {
+      setSync();
+      // Done on another day: the server has just moved the session to that day (and filed the log
+      // there). Re-read the plan and follow the session to its new day.
+      if (record.done_on && !S.outbox[k] && navigator.onLine) {
+        try { await refresh(); } catch (e) { /* keep what we have */ }
+        const moved = sessionsOn(record.done_on).find((x) =>
+          x.sport === s.sport && x.role === s.role && x.title === s.title && S.logs[lkey(x)]);
+        if (S.current === s) { if (moved) renderSession(moved); else { S.current = null; renderWeek(); } }
+        return;
+      }
+      if (S.current === s) renderSession(s);
+    });
   }
   async function flushOutbox() {
     if (!navigator.onLine) return;

@@ -3,6 +3,18 @@
 All notable changes to the athlete app. The version here matches `APP_VERSION` in `app.js`
 (shown in the in-app settings menu). Dates are YYYY-MM-DD.
 
+## 2.8.0 — 2026-10-16
+- **Log a session as done on another day and it moves there.** Pick "Done on" a different day and the
+  session moves to that day straight away (on your coach's screens too) — no more "logged Saturday,
+  done Friday". A session you have logged stays on that day: your coach cannot move it, only a new log
+  on another day does. Needs Supabase migrations `0011`–`0013` in ironman-planner.
+- **Your plan updates by itself.** Every 30 seconds (and when you come back to the app) changes your
+  coach made are picked up and the week you are looking at is redrawn in place — it never jumps back
+  to the start, and never while you have a session open.
+- **Today stands out**: the whole day box is tinted (light or dark, following your theme), not just
+  its name in red.
+- Service-worker cache bumped to `v17`.
+
 ## 2.7.1 — 2026-10-15
 - When your coach changes one of your sessions, the notice now reads **"Session changed"** (before it
   showed as a generic coach message). Service-worker cache bumped to `v16`.

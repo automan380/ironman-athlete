@@ -5,6 +5,7 @@
   --ok: #1f6b3a; --warn: #8a4b00; --skip: #8a8a90; --bad: #a11b17;
   --topbar-bg: #0b0b0c; --topbar-fg: #ededf0;      /* the brand bar: near-black in both themes */
   --swim: #1e7ec8; --bike: #d92b2b; --run: #1f9d55; --strength: #1a1a1c;  /* sport colours (coach webapp) */
+  --today: #fdecee; --today-head: #f9dade;          /* today's whole day box, a light wash of the accent */
   --radius: 10px;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color-scheme: light;
@@ -15,6 +16,7 @@
     --line: #2b2c31; --accent: #e8323c; --accent-fg: #ffffff;
     --ok: #7fc296; --warn: #e0a566; --skip: #7c7c85; --bad: #ef6b64;
     --swim: #4ea8e8; --bike: #f2564f; --run: #46c07c; --strength: #b9bac2; color-scheme: dark;
+    --today: #2a1a1d; --today-head: #3a1f24;
   }
 }
 :root[data-theme="dark"] {
@@ -22,6 +24,7 @@
   --line: #2b2c31; --accent: #e8323c; --accent-fg: #ffffff;
   --ok: #7fc296; --warn: #e0a566; --skip: #7c7c85; --bad: #ef6b64;
   --swim: #4ea8e8; --bike: #f2564f; --run: #46c07c; --strength: #b9bac2; color-scheme: dark;
+  --today: #2a1a1d; --today-head: #3a1f24;
 }
 
 /* Make [hidden] always win over any component display rule (fixes the stuck settings panel). */
@@ -141,7 +144,8 @@ button:disabled { opacity: .55; }
 .day { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
 .day > .dayhead { padding: .5rem .8rem; font-weight: 700; background: var(--surface2); border-bottom: 1px solid var(--line);
                   display: flex; align-items: baseline; gap: .5rem; }
-.day.today > .dayhead { color: var(--accent); }
+.day.today { background: var(--today); border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.day.today > .dayhead { color: var(--accent); background: var(--today-head); }
 .dayhead .dd { font-size: .8rem; color: var(--muted); font-weight: 500; }
 .rest { padding: .7rem .8rem; color: var(--muted); font-size: .9rem; }
 .sess { display: flex; align-items: center; gap: .6rem; padding: .7rem .8rem; border-top: 1px solid var(--line);
