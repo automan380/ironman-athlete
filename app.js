@@ -6,7 +6,7 @@
 (function () {
   "use strict";
 
-  const APP_VERSION = "2.11.0";          // shown in the settings menu; keep in step with CHANGELOG.md
+  const APP_VERSION = "2.12.0";          // shown in the settings menu; keep in step with CHANGELOG.md
   let pendingReload = false;            // set when the athlete taps "update"; drives the one reload below
   const CFG = window.IRONMAN_CONFIG || {};
   // "Remember me on this device": when on, the session lives in localStorage and survives app
@@ -897,6 +897,16 @@
   function touchLastSeen() {
     if (!navigator.onLine || !S.athleteId) return;
     try { SB.rpc("touch_last_seen").then(() => {}, () => {}); } catch (e) { /* ignore */ }
+    reportAppVersion();
+  }
+  // Tell the coach which version of the app this phone is RUNNING (Supabase 0016), so the coach app and
+  // the webapp can show it next to the athlete. Once per open (an update reloads the app, so a new
+  // version reports itself); the server ignores an unchanged version. Fire-and-forget, like the heartbeat.
+  let versionReportedFor = null;
+  function reportAppVersion() {
+    if (versionReportedFor === S.athleteId) return;
+    versionReportedFor = S.athleteId;
+    try { SB.rpc("report_app_version", { p_version: APP_VERSION }).then(() => {}, () => {}); } catch (e) { /* ignore */ }
   }
   async function markMessagesRead() {
     if (S.appNotice) S.appNotice.unread = false;
