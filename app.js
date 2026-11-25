@@ -6,7 +6,7 @@
 (function () {
   "use strict";
 
-  const APP_VERSION = "2.9.0";          // shown in the settings menu; keep in step with CHANGELOG.md
+  const APP_VERSION = "2.11.0";          // shown in the settings menu; keep in step with CHANGELOG.md
   let pendingReload = false;            // set when the athlete taps "update"; drives the one reload below
   const CFG = window.IRONMAN_CONFIG || {};
   // "Remember me on this device": when on, the session lives in localStorage and survives app
@@ -57,6 +57,8 @@
       msg_placeholder: "Write your message…",
       n_message: "Message from your coach", n_plan: "Plan updated", n_zones: "Zones updated", n_app: "App updated",
       n_session_edit: "Session changed",
+      since_prev: "Since the previous test", before: "Before", now: "Now", faster: "faster", slower: "slower",
+      method_changed: "The zone percentages changed between these two tests.",
       n_app_available: "Update available", app_available: "A new version of the app is ready — tap to update.",
       app_update_now: "Update now",
       app_updated: "App updated to v{v}.",
@@ -132,6 +134,8 @@
       msg_placeholder: "Scrivi il tuo messaggio…",
       n_message: "Messaggio dal coach", n_plan: "Piano aggiornato", n_zones: "Zone aggiornate", n_app: "App aggiornata",
       n_session_edit: "Sessione modificata",
+      since_prev: "Rispetto al test precedente", before: "Prima", now: "Ora", faster: "più veloce", slower: "più lento",
+      method_changed: "Le percentuali delle zone sono cambiate tra questi due test.",
       n_app_available: "Aggiornamento disponibile", app_available: "È pronta una nuova versione dell'app — tocca per aggiornare.",
       app_update_now: "Aggiorna ora",
       app_updated: "App aggiornata alla v{v}.",
@@ -351,10 +355,25 @@
         `<table class="ztable">` +
         (z.zones || []).map((zz) =>
           `<tr class="z"><td class="zn">Z${esc(zz.name)}</td><td>${esc(zz.label)}</td><td class="num">${esc(zz.range)}</td></tr>`).join("") +
-        `</table></div>`;
+        `</table>` + (z.change ? zoneChangeHtml(z.change) : "") + `</div>`;
     });
     app.innerHTML = html;
   }
+  // The change since the previous test of this sport, published by the coach's computer with the zones
+  // (Supabase 0015). Power and pace are coloured; heart rate is not -- a higher threshold heart rate is
+  // not by itself an improvement (coach's decision). Nothing is shown for a sport's first test.
+  function zoneChangeHtml(ch) {
+    const cls = ch.improved === true ? "better" : ch.improved === false ? "worse" : "";
+    const pct = String(ch.pct || "").replace(" faster", " " + T("faster")).replace(" slower", " " + T("slower"));
+    return `<div class="zchange"><div class="zchead">${T("since_prev")} · ${esc(shortDay(ch.previous_date))} → ${esc(shortDay(ch.latest_date))}</div>` +
+      `<div>${T("threshold")} ${esc(ch.was)} → <strong>${esc(ch.now)}</strong> <span class="delta ${cls}">${esc(ch.delta)} (${esc(pct)})</span></div>` +
+      (ch.method_changed ? `<div class="muted small">${T("method_changed")}</div>` : "") +
+      `<table class="ztable"><tr><th></th><th>${T("before")}</th><th>${T("now")}</th></tr>` +
+      (ch.zones || []).map((zz) =>
+        `<tr><td class="zn">Z${esc(zz.name)}</td><td class="num muted">${esc(zz.was)}</td><td class="num">${esc(zz.now)}</td></tr>`).join("") +
+      `</table></div>`;
+  }
+
 
   // ---------- Moving workouts page (Training around the roster) ----------
   function renderMoving() {
@@ -1346,6 +1365,8 @@
     let s = `<div class="sectiontitle">${T("target")}</div><div class="target">`;
     if (t.range) {
       s += `<strong>${esc(t.range)}</strong>${t.unit ? " " + esc(t.unit) : ""}`;
+      // The other measure, second (the coach chooses which leads, per athlete): "116-130 bpm (168-228 W)".
+      if (t.second && t.second.range) s += ` <span class="muted">(${esc(t.second.range)}${t.second.unit ? " " + esc(t.second.unit) : ""})</span>`;
       if (t.talk) s += ` · ${T("talk")} ${esc(t.talk)}`;
       if (t.rpe) s += ` · RPE ${esc(t.rpe[0])}–${esc(t.rpe[1])}`;
     } else {

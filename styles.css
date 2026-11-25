@@ -240,6 +240,13 @@ table.fuel td { padding: .25rem 0; }
 .whatsnew .wnhead { display: flex; align-items: baseline; justify-content: space-between; gap: .5rem; margin-bottom: .3rem; }
 .whatsnew ul.lines { margin: 0; padding-left: 1.1rem; }
 .whatsnew ul.lines li { margin: .2rem 0; }
+/* The change since the previous test, under each zone card. */
+.zchange { border-top: 1px solid var(--line); padding: .6rem .8rem; font-size: .9rem; }
+.zchange .zchead { color: var(--muted); font-size: .8rem; margin-bottom: .2rem; }
+.zchange .ztable { margin-top: .4rem; }
+.delta { font-weight: 700; margin-left: .3rem; white-space: nowrap; }
+.delta.better { color: var(--ok); }
+.delta.worse { color: var(--bad); }
 
 /* Moving workouts (Training around the roster) */
 .doc { display: flex; flex-direction: column; gap: 1rem; }
